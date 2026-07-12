@@ -1,0 +1,92 @@
+<style>
+  :root{
+    --ink:#0A0C14; --ink2:#0E1220; --surface:#141926;
+    --beamA:#F8C25E; --beamB:#E7902B; --gold:#F6B24A;
+    --indigoA:#8E9CFF; --indigoB:#5B6AD6;
+    --text:#F4F6FC;
+    --sys:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#333;display:flex;flex-wrap:wrap;gap:24px;padding:24px;font-family:var(--sys)}
+
+  .av{
+    width:512px;height:512px;position:relative;overflow:hidden;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+  }
+  /* cinematic dark ground with projector beam */
+  .cine{
+    background:
+      radial-gradient(420px 300px at 50% 6%, rgba(246,178,74,0.30), transparent 60%),
+      radial-gradient(520px 520px at 50% 50%, #10162a 0%, #0A0C14 70%);
+  }
+  .beam{
+    position:absolute;inset:0;pointer-events:none;
+    background:conic-gradient(from 200deg at 50% -6%, transparent 0deg, rgba(246,178,74,0.16) 20deg, transparent 42deg);
+  }
+  /* gold marks */
+  .gsq{
+    display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,var(--beamA),var(--beamB));
+    box-shadow:0 18px 50px rgba(246,178,74,0.35);
+  }
+  .isq{
+    display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(135deg,var(--indigoA),var(--indigoB));
+    box-shadow:0 18px 50px rgba(124,140,255,0.35);
+  }
+  .wm{font-weight:800;letter-spacing:.06em;line-height:1;text-align:center}
+  .wm .s{background:linear-gradient(135deg,var(--beamA),var(--beamB));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .wm .k{color:var(--text)}
+  .sub{font-weight:700;letter-spacing:.32em;text-transform:uppercase;font-size:22px;margin-top:14px}
+  .sub.gold{color:var(--gold)}
+  .sub.ind{color:var(--indigoA)}
+
+  /* ===== 1. BOT — solid gold (mark only) ===== */
+  #bot-solid{background:linear-gradient(140deg,#F9C765 0%,#F6B24A 40%,#E7902B 100%)}
+  #bot-solid .glow{position:absolute;inset:0;background:radial-gradient(300px 300px at 38% 30%,rgba(255,255,255,.35),transparent 60%)}
+
+  /* ===== 2. BOT — cinematic (mark + wordmark) ===== */
+
+  /* ===== 3. SUPPORT — cinematic play + SUPPORT ===== */
+
+  /* ===== 4. SUPPORT — headset ===== */
+</style>
+
+<!-- 1. BOT solid gold -->
+<div class="av cine" id="bot-solid" style="background:linear-gradient(140deg,#F9C765,#E7902B)">
+  <div class="glow"></div>
+  <svg width="230" height="230" viewBox="0 0 24 24" style="position:relative;filter:drop-shadow(0 8px 16px rgba(90,45,0,.35))">
+    <path d="M8 5.2v13.6l11-6.8-11-6.8z" fill="#0A0C14"/>
+  </svg>
+</div>
+
+<!-- 2. BOT cinematic -->
+<div class="av cine" id="bot-cine">
+  <div class="beam"></div>
+  <div class="gsq" style="width:200px;height:200px;border-radius:52px;position:relative">
+    <svg width="104" height="104" viewBox="0 0 24 24"><path d="M8 5.2v13.6l11-6.8-11-6.8z" fill="#0A0C14"/></svg>
+  </div>
+  <div class="wm" style="font-size:52px;margin-top:34px"><span class="s">SOF</span><span class="k">KINO</span></div>
+</div>
+
+<!-- 3. SUPPORT cinematic play + SUPPORT -->
+<div class="av cine" id="sup-play">
+  <div class="beam"></div>
+  <div class="gsq" style="width:170px;height:170px;border-radius:46px;position:relative">
+    <svg width="88" height="88" viewBox="0 0 24 24"><path d="M8 5.2v13.6l11-6.8-11-6.8z" fill="#0A0C14"/></svg>
+  </div>
+  <div class="wm" style="font-size:44px;margin-top:28px"><span class="s">SOF</span><span class="k">KINO</span></div>
+  <div class="sub gold">Support</div>
+</div>
+
+<!-- 4. SUPPORT headset -->
+<div class="av cine" id="sup-headset">
+  <div class="beam" style="background:conic-gradient(from 200deg at 50% -6%, transparent 0deg, rgba(124,140,255,0.18) 20deg, transparent 42deg)"></div>
+  <div class="isq" style="width:200px;height:200px;border-radius:52px;position:relative">
+    <svg width="108" height="108" viewBox="0 0 24 24">
+      <path d="M12 2a9 9 0 00-9 9v6.5A2.5 2.5 0 005.5 20H7a1.2 1.2 0 001.2-1.2v-5.6A1.2 1.2 0 007 12H5.2v-1a6.8 6.8 0 0113.6 0v1H17a1.2 1.2 0 00-1.2 1.2v5.6A1.2 1.2 0 0017 20h.7a3.2 3.2 0 01-2.9 1.9h-1.2a1.3 1.3 0 100 1.1h1.2A4.4 4.4 0 0019 20h-.5a2.5 2.5 0 002.5-2.5V11a9 9 0 00-9-9z" fill="#0A0C14"/>
+    </svg>
+  </div>
+  <div class="wm" style="font-size:40px;margin-top:30px"><span class="s">SOF</span><span class="k">KINO</span></div>
+  <div class="sub ind">Support</div>
+</div>
