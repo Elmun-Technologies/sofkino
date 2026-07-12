@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="uz">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOFKINO - Admin Panel</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background-color: #141a2e;
+            margin: 5% auto;
+            padding: 30px;
+            border: 1px solid #1e2542;
+            width: 80%;
+            max-width: 900px;
+            border-radius: 20px;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .close-modal {
+            position: absolute;
+            right: 20px;
+            top: 20px;
+            font-size: 28px;
+            color: #8b92b0;
+            cursor: pointer;
+        }
+
+        .close-modal:hover {
+            color: white;
+        }
+
+        /* Card interactivity */
+        .premium-card {
+            cursor: pointer;
+            transition: transform 0.3s ease, box-shadow 0.3s ease !important;
+        }
+
+        .premium-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 30px rgba(102, 126, 234, 0.2);
+        }
+
+        /* Check (Receipt) Style */
+        .receipt-card {
+            background: white;
+            color: black;
+            padding: 20px;
+            width: 300px;
+            font-family: 'Courier New', Courier, monospace;
+            border: 1px dashed #ccc;
+            margin: 10px auto;
+        }
+
+        /* Form Styles */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #8b92b0;
+            font-size: 14px;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            background: #0f1429;
+            border: 1px solid #1e2542;
+            padding: 12px;
+            border-radius: 8px;
+            color: white;
+            font-size: 14px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <!-- Login Screen -->
+        <div id="login-screen" class="screen">
+            <div class="login-container">
+                <h1>🎬 SOFKINO Admin</h1>
+                <form id="login-form">
+                    <input type="text" id="username" placeholder="Username" required>
+                    <input type="password" id="password" placeholder="Password" required>
+                    <button type="submit">Kirish</button>
+                </form>
+                <p id="login-error" class="error"></p>
+            </div>
+        </div>
+
+        <!-- Dashboard -->
+        <div id="dashboard-screen" class="screen" style="display: none;">
+            <div class="sidebar">
+                <div class="sidebar-header">
+                    <div class="logo">📊</div>
+                    <div>
+                        <h2>SOFKINO</h2>
+                        <small class="version">v2.0</small>
+                    </div>
+                </div>
+                <nav>
+                    <a href="#" class="nav-link active" data-page="analytics">📊 Asosiy Analitika</a>
+                    <a href="#" class="nav-link" data-page="premium">💎 Premium Tizim</a>
+                    <a href="#" class="nav-link" data-page="movies">🎬 Kinolar Bazasi</a>
+                    <a href="#" class="nav-link" data-page="users">👥 Foydalanuvchilar</a>
+                    <a href="#" class="nav-link" data-page="promocodes">🎁 Promokodlar</a>
+                    <a href="#" class="nav-link" data-page="genres">🏆 Janrlar (Top 10)</a>
+                    <a href="#" class="nav-link" data-page="broadcast">📢 Rassilka & OP</a>
+                    <a href="#" class="nav-link" data-page="channels">📢 Majburiy Obuna</a>
+                </nav>
+                <button id="logout-btn">🚪 CHIQISH</button>
+            </div>
+
+            <div class="main-content">
+                <!-- Analytics Page -->
+                <div id="analytics-page" class="page active">
+                    <div class="dashboard-header">
+                        <div>
+                            <h1>SKVOZNAYA ANALITIKA</h1>
+                            <p class="subtitle">Foydalanuvchilar qiziqishi va demografiyasi bo'yicha kuchli filtrlar.
+                            </p>
+                        </div>
+                        <div class="total-revenue" id="total-revenue">0 SO'M</div>
+                    </div>
+
+                    <!-- Skvoznaya Filters -->
+                    <div
+                        style="background: #141a2e; border: 1px solid #1e2542; padding: 25px; border-radius: 16px; margin-bottom: 25px;">
+                        <h3 style="margin-bottom: 20px; color: #667eea;">🔍 Analitika Filtrlari</h3>
+                        <div
+                            style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                            <div>
+                                <label
+                                    style="color: #8b92b0; font-size: 12px; display: block; margin-bottom: 8px;">MAMLAKAT</label>
+                                <select id="filter-country"
+                                    style="width: 100%; background: #0f1429; color: white; padding: 12px; border: 1px solid #1e2542; border-radius: 8px;">
+                                    <option value="">Barchasi</option>
+                                    <option value="O'zbekiston">O'zbekiston</option>
+                                    <option value="Rossiya">Rossiya</option>
+                                    <option value="AQSH">AQSH</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="color: #8b92b0; font-size: 12px; display: block; margin-bottom: 8px;">YOSH
+                                    ORALIG'I</label>
+                                <div style="display: flex; gap: 5px;">
+                                    <input type="number" id="filter-age-min" placeholder="Min"
+                                        style="width: 50%; background: #0f1429; color: white; padding: 12px; border: 1px solid #1e2542; border-radius: 8px;">
+                                    <input type="number" id="filter-age-max" placeholder="Max"
+                                        style="width: 50%; background: #0f1429; color: white; padding: 12px; border: 1px solid #1e2542; border-radius: 8px;">
+                                </div>
+                            </div>
+                            <div>
+                                <label
+                                    style="color: #8b92b0; font-size: 12px; display: block; margin-bottom: 8px;">QIZIQISHLAR
+                                    (JANR)</label>
+                                <input type="text" id="filter-interest" placeholder="Masalan: Komediya"
+                                    style="width: 100%; background: #0f1429; color: white; padding: 12px; border: 1px solid #1e2542; border-radius: 8px;">
+                            </div>
+                            <div style="display: flex; align-items: flex-end;">
+                                <button id="apply-skvoznaya-filters" class="btn-primary"
+                                    style="margin: 0; width: 100%;">QO'LLASH</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Main Stats -->
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="icon" style="background: linear-gradient(135deg, #667eea, #764ba2);">👁</div>
+                            <div class="label">JAMI KO'RISHLAR</div>
+                            <div class="value" id="total-views">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="icon" style="background: linear-gradient(135deg, #10b981, #059669);">👥</div>
+                            <div class="label">YANGI FOYDALANUVCHILAR</div>
+                            <div class="value" id="new-users">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="icon" style="background: linear-gradient(135deg, #f59e0b, #d97706);">🔑</div>
+                            <div class="label">AKTIV PROMOKODLAR</div>
+                            <div class="value" id="active-promos">0</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="icon" style="background: linear-gradient(135deg, #8b5cf6, #7c3aed);">💰</div>
+                            <div class="label">BUGUNGI TUSHUM</div>
+                            <div class="value revenue" id="today-revenue">0 SO'M</div>
+                        </div>
+                    </div>
+
+                    <!-- Alerts -->
+                    <div class="alerts">
+                        <h3>⚠️ OGOHLANTIRISHLAR & TAVSIYALAR</h3>
+                        <div id="alerts-list">
+                            <div class="alert warning">
+                                <div class="alert-icon">⚠️</div>
+                                <div class="alert-content">
+                                    <strong>Foydalanuvchi</strong>: "Alex" juda ko'p reklama yubormoqda. Blokash ko'rib
+                                    chiqing.
+                                </div>
+                                <button class="alert-action">BLOKLASH</button>
+                            </div>
+                            <div class="alert info">
+                                <div class="alert-icon">📊</div>
+                                <div class="alert-content">
+                                    <strong>"BLOOB100" promokodi</strong>: 80/100 limitga yetdi. Tezda yangilang!
+                                </div>
+                                <button class="alert-action">LIMITNI OSHIRISH</button>
+                            </div>
+                            <div class="alert success">
+                                <div class="alert-icon">✅</div>
+                                <div class="alert-content">
+                                    <strong>Drama janri</strong>: bu hafta 45% ko'proq ko'rildi. Yangi drama
+                                    qo'shlshtavsiya etiladi.
+                                </div>
+                                <button class="alert-action">KINO QO'SHISH</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Top Genres & Top Movies Row -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 25px;">
+                        <div
+                            style="background: #141a2e; border: 1px solid #1e2542; padding: 25px; border-radius: 16px;">
+                            <h3 style="margin-bottom: 20px;">🏆 Janrlar (Top)</h3>
+                            <div id="top-genres-chart"></div>
+                        </div>
+                        <div
+                            style="background: #141a2e; border: 1px solid #1e2542; padding: 25px; border-radius: 16px;">
+                            <h3 style="margin-bottom: 20px;">🔥 Top Kinolar</h3>
+                            <div id="top-movies-list">
+                                <!-- Top movies will be injected here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Premium Page -->
+                <div id="premium-page" class="page">
+                    <div class="dashboard-header">
+                        <div>
+                            <h1>PREMIUM PANELI</h1>
+                            <p class="subtitle">Barcha obstinachilarga real vaqt rejimida Telegram botga ta'sir qiladi.
+                            </p>
+                        </div>
+                        <div class="total-revenue" id="premium-total-revenue">109,519,100 SO'M</div>
+                    </div>
+
+                    <!-- Advanced Filters -->
+                    <div
+                        style="background: #141a2e; border: 1px solid #1e2542; padding: 25px; border-radius: 16px; margin-bottom: 20px;">
+                        <h3 style="margin-bottom: 20px; color: #667eea;">🔍 Filtrlar</h3>
+
+                        <div
+                            style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 15px;">
+                            <!-- Subscription Type Filter -->
+                            <div>
+                                <label
+                                    style="color: #8b92b0; font-size: 12px; display: block; margin-bottom: 8px;">TARIF
+                                    TURI</label>
+                                <select id="subscription-type-filter"
+                                    style="width: 100%; background: #0f1429; color: white; padding: 12px 15px; border: 1px solid #1e2542; border-radius: 8px; cursor: pointer;">
+                                    <option value="all">Barchasi</option>
+                                    <option value="monthly">🥉 Oylik</option>
+                                    <option value="quarterly">🥈 3 Oylik</option>
+                                    <option value="semi_annual">🥇 6 Oylik</option>
+                                    <option value="lifetime">👑 Umrbod</option>
+                                </select>
+                            </div>
+
+                            <!-- Month Filter -->
+                            <div>
+                                <label
+                                    style="color: #8b92b0; font-size: 12px; display: block; margin-bottom: 8px;">OY</label>
+                                <select id="month-filter"
+                                    style="width: 100%; background: #0f1429; color: white; padding: 12px 15px; border: 1px solid #1e2542; border-radius: 8px; cursor: pointer;">
+                                    <option value="all">Barchasi</option>
+                                    <option value="0">Yanvar</option>
+                                    <option value="1">Fevral</option>
+                                    <option value="2">Mart</option>
+                                    <option value="3">Aprel</option>
+                                    <option value="4">May</option>
+                                    <option value="5">Iyun</option>
+                                    <option value="6">Iyul</option>
+                                    <option value="7">Avgust</option>
+                                    <option value="8">Sentabr</option>
+                                    <option value="9">Oktabr</option>
+                                    <option value="10">Noyabr</option>
+                                    <option value="11">Dekabr</option>
+                                </select>
+                            </div>
+
+                            <!-- Year Filter -->
+                            <div>
+                                <label
+                                    style="color: #8b92b0; font-size: 12px; display: block; margin-bottom: 8px;">YIL</label>
+                                <select id="year-filter"
+                                    style="width: 100%; background: #0f1429; color: white; padding: 12px 15px; border: 1px solid #1e2542; border-radius: 8px; cursor: pointer;">
+                                    <option value="2025">2025</option>
+                                    <option value="2024">2024</option>
+                                    <option value="2023">2023</option>
+                                </select>
+                            </div>
+
+                            <!-- Custom Date Range -->
+                            <div>
+                                <label style="color: #8b92b0; font-size: 12px; display: block; margin-bottom: 8px;">SANA
+                                    ORALIG'I</label>
+                                <div style="display: flex; gap: 5px;">
+                                    <input type="date" id="start-date"
+                                        style="flex: 1; background: #0f1429; color: white; padding: 12px; border: 1px solid #1e2542; border-radius: 8px;">
+                                    <input type="date" id="end-date"
+                                        style="flex: 1; background: #0f1429; color: white; padding: 12px; border: 1px solid #1e2542; border-radius: 8px;">
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 15px; display: flex; gap: 10px;">
+                            <button id="apply-filters" class="btn-primary" style="margin: 0;">Filtrlash</button>
+                            <button id="reset-filters"
+                                style="padding: 12px 25px; background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 8px; cursor: pointer;">Tozalash</button>
+                        </div>
+                    </div>
+
+                    <!-- Comparison Stats -->
+                    <div class="stats-grid" style="margin-bottom: 30px;">
+                        <div class="stat-card">
+                            <div class="label">JORIY DAVRDA</div>
+                            <div class="value revenue" id="current-revenue">0 SO'M</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">O'TGAN OY</div>
+                            <div class="value" id="previous-revenue">0 SO'M</div>
+                            <div id="growth-indicator" style="margin-top: 8px;"></div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="label">KELGUSI OY PROGNOZI</div>
+                            <div class="value revenue" id="forecast-revenue">0 SO'M</div>
+                            <div style="color: #8b92b0; font-size: 12px; margin-top: 5px;">AI tahmini</div>
+                        </div>
+                    </div>
+
+                    <!-- Subscription Types -->
+                    <div class="premium-grid">
+                        <div class="premium-card">
+                            <div class="medal">🥉</div>
+                            <h3>OYLIK</h3>
+                            <div class="subscribers">OBUNACHILIAR SONI</div>
+                            <div class="count" id="monthly-count">0</div>
+                            <div class="revenue-label">JAMI TUSHUM</div>
+                            <div class="revenue-value" id="monthly-revenue">0 SO'M</div>
+                        </div>
+                        <div class="premium-card">
+                            <div class="medal">🥈</div>
+                            <h3>3 OYLIK</h3>
+                            <div class="subscribers">OBUNACHILIAR SONI</div>
+                            <div class="count" id="quarterly-count">0</div>
+                            <div class="revenue-label">JAMI TUSHUM</div>
+                            <div class="revenue-value" id="quarterly-revenue">0 SO'M</div>
+                        </div>
+                        <div class="premium-card">
+                            <div class="medal">🥇</div>
+                            <h3>6 OYLIK</h3>
+                            <div class="subscribers">OBUNACHILIAR SONI</div>
+                            <div class="count" id="semi-annual-count">0</div>
+                            <div class="revenue-label">JAMI TUSHUM</div>
+                            <div class="revenue-value" id="semi-annual-revenue">0 SO'M</div>
+                        </div>
+                        <div class="premium-card">
+                            <div class="medal">👑</div>
+                            <h3>UMRBOD</h3>
+                            <div class="subscribers">OBUNACHILIAR SONI</div>
+                            <div class="count" id="lifetime-count">0</div>
+                            <div class="revenue-label">JAMI TUSHUM</div>
+                            <div class="revenue-value" id="lifetime-revenue">0 SO'M</div>
+                        </div>
+                    </div>
+
+                    <!-- Monthly Breakdown Chart -->
+                    <div
+                        style="background: #141a2e; border: 1px solid #1e2542; padding: 25px; border-radius: 16px; margin-top: 30px;">
+                        <h3 style="margin-bottom: 20px;">📊 Oylik Tushum (Yillik)</h3>
+                        <div id="monthly-chart"></div>
+                    </div>
+
+                    <!-- Payment Methods -->
+                    <div
+                        style="background: #141a2e; border: 1px solid #1e2542; padding: 25px; border-radius: 16px; margin-top: 30px;">
+                        <div
+                            style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                            <h3>💳 To'lov Tizimlari</h3>
+                            <div style="display: flex; gap: 10px;">
+                                <button id="export-excel" class="btn-primary" style="margin: 0; background: #10b981;">📊
+                                    Excel yuklash</button>
+                                <button id="add-payment-system" class="btn-primary" style="margin: 0;">➕ To'lov
+                                    tizimi</button>
+                            </div>
+                        </div>
+                        <div id="payment-methods"></div>
+                    </div>
+                </div>
+
+                <!-- Movies Page -->
+                <div id="movies-page" class="page">
+                    <div class="dashboard-header">
+                        <div>
+                            <h1>🎬 KINOLAR BAZASI</h1>
+                            <p class="subtitle">Barcha kinolar nazorati va chuqur analitika shu yerda.</p>
+                        </div>
+                        <button id="add-movie-btn" class="btn-primary" style="margin: 0;">➕ YANGI KINO</button>
+                    </div>
+
+                    <!-- Top Performing Movies Row (NEW) -->
+                    <div id="movies-top-row"
+                        style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px;">
+                        <!-- Top movies cards will be injected here -->
+                    </div>
+
+                    <!-- Movies Summary Stats (NEW) -->
+                    <div class="stats-grid"
+                        style="grid-template-columns: repeat(4, 1fr); margin-bottom: 25px; gap: 15px;">
+                        <div class="stat-card" style="padding: 15px; background: rgba(102, 126, 234, 0.05);">
+                            <div class="label" style="font-size: 10px;">JAMI KINOLAR</div>
+                            <div class="value" id="movie-total-count" style="font-size: 20px;">0</div>
+                        </div>
+                        <div class="stat-card" style="padding: 15px; background: rgba(16, 185, 129, 0.05);">
+                            <div class="label" style="font-size: 10px;">JAMI KO'RISHLAR</div>
+                            <div class="value" id="movie-total-views" style="font-size: 20px;">0</div>
+                        </div>
+                        <div class="stat-card" style="padding: 15px; background: rgba(245, 158, 11, 0.05);">
+                            <div class="label" style="font-size: 10px;">O'RTACHA REYTING</div>
+                            <div class="value" id="movie-avg-rating" style="font-size: 20px;">0.0</div>
+                        </div>
+                        <div class="stat-card" style="padding: 15px; background: rgba(139, 92, 246, 0.05);">
+                            <div class="label" style="font-size: 10px;">JAMI ULASHISH</div>
+                            <div class="value" id="movie-total-shares" style="font-size: 20px;">0</div>
+                        </div>
+                    </div>
+
+                    <!-- Skvoznaya Filters for Movies (NEW) -->
+                    <div
+                        style="background: #141a2e; border: 1px solid #1e2542; padding: 20px; border-radius: 16px; margin-bottom: 25px; display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end;">
+                        <div style="flex: 1; min-width: 200px;">
+                            <label
+                                style="color: #8b92b0; font-size: 11px; display: block; margin-bottom: 8px; text-transform: uppercase;">Mamlaka/IP</label>
+                            <select id="movie-filter-country"
+                                style="width: 100%; background: #0f1429; color: white; padding: 10px; border: 1px solid #1e2542; border-radius: 8px;">
+                                <option value="">Barcha davlatlar</option>
+                                <option value="O'zbekiston">O'zbekiston</option>
+                                <option value="Rossiya">Rossiya</option>
+                                <option value="AQSH">AQSH</option>
+                                <option value="Turkiya">Turkiya</option>
+                            </select>
+                        </div>
+                        <div style="width: 150px;">
+                            <label
+                                style="color: #8b92b0; font-size: 11px; display: block; margin-bottom: 8px; text-transform: uppercase;">Yosh
+                                Diapazoni</label>
+                            <select id="movie-filter-age"
+                                style="width: 100%; background: #0f1429; color: white; padding: 10px; border: 1px solid #1e2542; border-radius: 8px;">
+                                <option value="">Barchasi</option>
+                                <option value="0-18">Bolalar (0-18)</option>
+                                <option value="18-25">Yoshlar (18-25)</option>
+                                <option value="25-40">Kattalar (25-40)</option>
+                                <option value="40+">Keksalar (40+)</option>
+                            </select>
+                        </div>
+                        <div style="width: 150px;">
+                            <label
+                                style="color: #8b92b0; font-size: 11px; display: block; margin-bottom: 8px; text-transform: uppercase;">Qiziqishi</label>
+                            <select id="movie-filter-interest"
+                                style="width: 100%; background: #0f1429; color: white; padding: 10px; border: 1px solid #1e2542; border-radius: 8px;">
+                                <option value="">Barchasi</option>
+                                <option value="Kino">Kino</option>
+                                <option value="Sport">Sport</option>
+                                <option value="Musiqa">Musiqa</option>
+                                <option value="Texno">Texno</option>
+                            </select>
+                        </div>
+                        <div style="flex: 1; min-width: 200px;">
+                            <label
+                                style="color: #8b92b0; font-size: 11px; display: block; margin-bottom: 8px; text-transform: uppercase;">Qidiruv
+                                (Nomi yoki Janri)</label>
+                            <input type="text" id="movie-search" placeholder="Kino nomini yozing..."
+                                style="width: 100%; background: #0f1429; color: white; padding: 10px; border: 1px solid #1e2542; border-radius: 8px;">
+                        </div>
+                        <button id="apply-movie-filters" class="btn-primary" style="margin: 0; padding: 10px 20px;">🔍
+                            QIDIRISH</button>
+                    </div>
+
+                    <div id="movies-list"></div>
+                </div>
+
+                <!-- Users Page -->
+                <div id="users-page" class="page">
+                    <div class="dashboard-header">
+                        <h1>👥 FOYDALANUVCHILAR</h1>
+                    </div>
+                    <div style="background: #141a2e; border: 1px solid #1e2542; padding: 20px; border-radius: 16px; margin-bottom: 20px;">
+                        <h3 style="color: #667eea; margin-bottom: 15px;">🔍 FILTRLAR</h3>
+                        <form id="users-filter-form">
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>QIDIRUV</label>
+                                    <input type="text" name="search" placeholder="Ism, username...">
+                                </div>
+                                <div class="form-group">
+                                    <label>JINS</label>
+                                    <select name="gender">
+                                        <option value="">Barcha</option>
+                                        <option value="male">Erkak</option>
+                                        <option value="female">Ayol</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label>DAVLAT</label>
+                                    <input type="text" name="country" placeholder="Masalan: Uzbekistan">
+                                </div>
+                                <div class="form-group">
+                                    <label>YOSH</label>
+                                    <div style="display: flex; gap: 10px;">
+                                        <input type="number" name="minAge" placeholder="Min" min="0" max="100">
+                                        <input type="number" name="maxAge" placeholder="Max" min="0" max="100">
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="submit" class="btn-primary" style="width: 100%; padding: 10px;">FILTRLASH</button>
+                        </form>
+                    </div>
+                    <div id="users-list"></div>
+                </div>
+
+                <!-- Other pages similar structure -->
+                <div id="promocodes-page" class="page">
+                    <div class="dashboard-header">
+                        <h1>🎁 PROMOKODLAR</h1>
+                        <button id="add-promocode-btn" class="btn-primary" style="margin: 0;">➕ YANGI PROMOKOD</button>
+                    </div>
+                    <div id="promocodes-list"></div>
+                </div>
+
+                <div id="genres-page" class="page">
+                    <div class="dashboard-header">
+                        <h1>🏆 JANRLAR (TOP 10)</h1>
+                        <button id="add-genre-btn" class="btn-primary" style="margin: 0;">➕ YANGI JANR</button>
+                    </div>
+                    <div id="genres-list"></div>
+                    <div id="genres-analytics" style="margin-top: 30px;"></div>
+                </div>
+
+                <div id="broadcast-page" class="page">
+                    <h1>📢 Rassilka</h1>
+                    <p>Telegram bot orqali barcha foydalanuvchilarga xabar yuborish.</p>
+                    <div
+                        style="background: #141a2e; border: 1px solid #1e2542; padding: 25px; border-radius: 16px; margin-top: 20px;">
+                        <p style="color: #8b92b0;">Eslatma: Rassilka yuborish bevosita Telegram botning o'zi orqali
+                            (Admin Panel -> Rassilka) amalga oshiriladi. Bu yerda faqat tahliliy ma'lumotlar
+                            ko'rsatiladi.</p>
+                    </div>
+                </div>
+
+                <div id="channels-page" class="page">
+                    <div class="dashboard-header">
+                        <h1>📢 MAJBURIY OBUNA (KANALLAR)</h1>
+                        <button id="add-channel-btn" class="btn-primary" style="margin: 0;">➕ YANGI KANAL</button>
+                    </div>
+                    <div id="channels-list"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="details-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" id="close-details">&times;</span>
+            <div id="modal-header">
+                <h2 id="details-title" style="color: #667eea; margin-bottom: 20px;">OBUNACHILAR RO'YHATI</h2>
+            </div>
+            <div id="details-body">
+                <!-- Table for subscribers will be injected here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Movie Analytics Modal -->
+    <div id="movie-analytics-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" id="close-movie-analytics">&times;</span>
+            <div id="movie-analytics-header">
+                <h2 id="movie-analytics-title" style="color: #667eea; margin-bottom: 20px;">KINO ANALITIKASI</h2>
+            </div>
+            <div id="movie-analytics-body">
+                <div class="stats-grid" style="margin-bottom: 20px;">
+                    <div class="stat-card">
+                        <div class="label">KO'RISHLAR</div>
+                        <div class="value" id="movie-detail-views">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">LIKE / DISLIKE</div>
+                        <div class="value" id="movie-detail-likes">0 / 0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">ULASHILDI</div>
+                        <div class="value" id="movie-detail-shares">0</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="label">WATCH TIME</div>
+                        <div class="value" id="movie-detail-watchtime">0m</div>
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div style="background: #0f1429; padding: 15px; border-radius: 10px;">
+                        <h4>🌍 DAVLATLAR</h4>
+                        <div id="movie-countries-list"></div>
+                    </div>
+                    <div style="background: #0f1429; padding: 15px; border-radius: 10px;">
+                        <h4>📊 YOSH DIAPAZONI</h4>
+                        <div id="movie-ages-list"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Movie Modal -->
+    <div id="add-movie-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" id="close-add-movie">&times;</span>
+            <h2 style="color: #667eea; margin-bottom: 25px;">🎬 YANGI KINO QO'SHISH (OPTIMAL UI)</h2>
+            <form id="add-movie-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>🎬 KINO NOMI</label>
+                        <input type="text" name="title" placeholder="Masalan: Forsaj 10" required>
+                    </div>
+                    <div class="form-group">
+                        <label>🎭 JANRI</label>
+                        <select name="genreId" id="movie-genre-select" required>
+                            <!-- Genres will be loaded here -->
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>🌍 DAVLAT</label>
+                        <input type="text" name="country" placeholder="Masalan: AQSH, O'zbekiston">
+                    </div>
+                    <div class="form-group">
+                        <label>📅 YILI</label>
+                        <input type="number" name="releaseYear" placeholder="2024" min="1900" max="2026">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>📝 TAVSIF</label>
+                    <textarea name="description" rows="3" placeholder="Kino haqida qisqacha ma'lumot..."></textarea>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>🔑 KINO KODI</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="number" name="customCode" id="movie-access-code" placeholder="Kod kiriting..."
+                                min="1" max="10000">
+                            <button type="button" id="random-code-btn" class="btn-primary"
+                                style="margin: 0; width: auto; background: #6366f1;">🎲 AUTO</button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>⭐ INITIAL REYTING (0-10)</label>
+                        <input type="number" name="rating" step="0.1" min="0" max="10" placeholder="8.5">
+                    </div>
+                </div>
+
+                <div
+                    style="margin-top: 20px; padding: 20px; background: rgba(102, 126, 234, 0.05); border: 1px dashed #1e2542; border-radius: 12px;">
+                    <h4 style="margin-bottom: 15px; color: #667eea;">🔗 MANBALAR VA YUKLASH</h4>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>🔵 TELEGRAM LINK (Bot manbasi)</label>
+                            <input type="text" name="telegramLink" placeholder="t.me/c/12345/6789">
+                        </div>
+                        <div class="form-group">
+                            <label>🌐 TASHQI HAVOLA (WEB)</label>
+                            <input type="text" name="externalLinkWeb" placeholder="https://example.com/movie.mp4">
+                        </div>
+                    </div>
+
+                    <div class="form-group" id="file-upload-section">
+                        <label>📂 FILMNI YUKLASH (MAX 2GB)</label>
+                        <div id="dropzone" class="file-upload-dropzone"
+                            onclick="document.getElementById('movie-file-input').click()">
+                            <div style="font-size: 60px; margin-bottom: 15px;">🎞️</div>
+                            <span id="file-name-display"
+                                style="color: white; font-weight: 600; font-size: 16px; display: block; margin-bottom: 5px;">Kino
+                                faylini tanlang yoki sudrab keling</span>
+                            <p style="color: #8b92b0; font-size: 12px;">Telegram va Web uchun optimal formatlar: .mp4,
+                                .mkv</p>
+                            <input type="file" id="movie-file-input" name="file" accept="video/*"
+                                style="display: none;">
+                        </div>
+                    </div>
+                </div>
+
+                <div style="display: flex; gap: 10px; margin-top: 25px;">
+                    <button type="submit" class="btn-primary"
+                        style="flex: 1; margin: 0; padding: 15px; font-weight: 700;">SAQLASH
+                        VA CHOP ETISH</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add Channel Modal -->
+    <div id="add-channel-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" id="close-add-channel">&times;</span>
+            <h2 style="color: #667eea; margin-bottom: 25px;">📢 YANGI KANAL QO'SHISH</h2>
+            <form id="add-channel-form">
+                <div class="form-group">
+                    <label>📢 KANAL NOMI</label>
+                    <input type="text" name="title" placeholder="Masalan: Kino Olami" required>
+                </div>
+                <div class="form-group">
+                    <label>🆔 KANAL ID (yoki @username)</label>
+                    <input type="text" name="channel_id" placeholder="Masalan: -100123456789 yoki @kanal_nomi" required>
+                </div>
+                <div class="form-group">
+                    <label>🔗 KANAL LINKI (t.me/...)</label>
+                    <input type="url" name="url" placeholder="https://t.me/kanal_nomi" required>
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 25px;">
+                    <button type="submit" class="btn-primary"
+                        style="flex: 1; margin: 0; padding: 15px; font-weight: 700;">SAQLASH</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Hidden Receipt Container (for generation) -->
+    <div id="receipt-container" style="display: none; position: absolute; left: -9999px;"></div>
+
+    <!-- Add Genre Modal -->
+    <div id="add-genre-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" id="close-add-genre">&times;</span>
+            <h2 style="color: #667eea; margin-bottom: 25px;">🎭 YANGI JANR QO'SHISH</h2>
+            <form id="add-genre-form">
+                <div class="form-group">
+                    <label>🎭 JANR NOMI</label>
+                    <input type="text" name="name" placeholder="Masalan: Melodrama" required>
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 25px;">
+                    <button type="submit" class="btn-primary"
+                        style="flex: 1; margin: 0; padding: 15px; font-weight: 700;">SAQLASH</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="add-promocode-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" id="close-add-promocode">&times;</span>
+            <h2 style="color: #667eea; margin-bottom: 25px;">🎁 YANGI PROMOKOD YARATISH</h2>
+            <form id="add-promocode-form">
+                <div class="form-group">
+                    <label>🎁 PROMOKOD NOMI</label>
+                    <input type="text" name="name" placeholder="Masalan: Yangi Yil Chegirmasi" required>
+                </div>
+                <div class="form-group">
+                    <label>🔢 PROMOKOD KODI</label>
+                    <input type="text" name="code" placeholder="Masalan: NY2025" required>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>📊 FOYDALANISH LIMITI</label>
+                        <input type="number" name="usage_limit" placeholder="Masalan: 100">
+                    </div>
+                    <div class="form-group">
+                        <label>⏰ MUDDAT (ixtiyoriy)</label>
+                        <input type="datetime-local" name="expires_at">
+                    </div>
+                </div>
+                <div style="display: flex; gap: 10px; margin-top: 25px;">
+                    <button type="submit" class="btn-primary"
+                        style="flex: 1; margin: 0; padding: 15px; font-weight: 700;">YARATISH</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="promocode-analytics-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" id="close-promocode-analytics">&times;</span>
+            <h2 id="promocode-analytics-title" style="color: #667eea; margin-bottom: 25px;">📊 PROMOKOD ANALITIKASI</h2>
+            <div id="promocode-analytics-content" style="max-height: 400px; overflow-y: auto;"></div>
+        </div>
+    </div>
+
+    <div id="top-movies-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal" id="close-top-movies">&times;</span>
+            <h2 id="top-movies-title" style="color: #667eea; margin-bottom: 25px;">🎬 TOP 10 KINOLAR</h2>
+            <div id="top-movies-list" style="max-height: 400px; overflow-y: auto;"></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>

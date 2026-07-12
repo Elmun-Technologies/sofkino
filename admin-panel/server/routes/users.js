@@ -1,0 +1,81 @@
+const express = require('express');
+const router = express.Router();
+const authMiddleware = require('../middleware/auth');
+const { db } = require('../server');
+
+// Get all users with filters
+router.get('/', authMiddleware, (req, res) => {
+    try {
+        const { search, gender, country, minAge, maxAge } = req.query;
+
+        let query = 'SELECT * FROM users WHERE 1=1';
+        const params = [];
+
+        if (search) {
+            query += ' AND (full_name LIKE ? OR username LIKE ?)';
+            params.push(`%${search}%`, `%${search}%`);
+        }
+
+        if (gender) {
+            query += ' AND gender = ?';
+            params.push(gender);
+        }
+
+        if (country) {
+            query += ' AND country = ?';
+            params.push(country);
+        }
+
+        if (minAge) {
+            query += ' AND age >= ?';
+            params.push(minAge);
+        }
+
+        if (maxAge) {
+            query += ' AND age <= ?';
+            params.push(maxAge);
+        }
+
+        query += ' ORDER BY joined_at DESC LIMIT 100';
+
+        const users = db.prepare(query).all(...params);
+        res.json(users);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Ban user
+router.post('/:id/ban', authMiddleware, (req, res) => {
+    try {
+        const { id } = req.params;
+        db.prepare('UPDATE users SET is_banned = 1 WHERE telegram_id = ?').run(id);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Unban user
+router.post('/:id/unban', authMiddleware, (req, res) => {
+    try {
+        const { id } = req.params;
+        db.prepare('UPDATE users SET is_banned = 0 WHERE telegram_id = ?').run(id);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Delete user
+router.delete('/:id', authMiddleware, (req, res) => {
+    try {
+        const { id } = req.params;
+        db.prepare('DELETE FROM users WHERE telegram_id = ?').run(id);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+module.exports = router;
