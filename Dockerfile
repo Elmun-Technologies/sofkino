@@ -44,6 +44,10 @@ VOLUME /data
 
 # Bot and admin panel run as two processes in one machine so they can
 # share the sqlite file on /data through SQLite's own file locking,
-# the same way they already do when run locally.
+# the same way they already do when run locally. The bot creates and
+# migrates the schema on boot, so give it a head start before the
+# admin panel opens the same file to avoid racing the initial CREATE
+# TABLE statements on a brand-new volume. `wait -n` needs bash, not
+# the image's default dash /bin/sh.
 ENV DB_PATH="/data/database.sqlite"
-CMD ["sh", "-c", "node src/bot.js & node admin-panel/server/server.js & wait -n"]
+CMD ["bash", "-c", "node src/bot.js & sleep 3 && node admin-panel/server/server.js & wait -n"]
