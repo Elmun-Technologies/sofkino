@@ -1,0 +1,12 @@
+node_modules/
+.env
+*.log
+database.sqlite
+admin-panel/node_modules/
+admin-panel/.env
+admin-panel/out.txt
+admin-panel/err.txt
+.DS_Store
+**/node_modules/
+**/.env
+**/.DS_Store
