@@ -1100,6 +1100,10 @@ async function loadGenres() {
         `;
 
         document.getElementById('genres-analytics').innerHTML = analyticsHtml;
+    } catch (err) {
+        console.error(err);
+    }
+}
 
 async function handleAddGenre(e) {
     e.preventDefault();
