@@ -1,0 +1,10 @@
+module.exports = {
+    FREE_RANDOM_PER_DAY: 1,
+    FREE_CODES_PER_MONTH: 5,
+    REFERRAL_BONUS_UNLOCKS: 1,
+    STREAK_MILESTONE_DAYS: 7,
+    STREAK_MILESTONE_BONUS: 1,
+    TIMEZONE: 'Asia/Tashkent',
+    TZ_OFFSET_SQL: '+5 hours',
+    PROGREV_CRON: '0 10 * * *'
+};

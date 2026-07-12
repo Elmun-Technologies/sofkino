@@ -1,11 +1,13 @@
 require('dotenv').config();
-const { Telegraf, session, Scenes } = require('telegraf');
+const { Telegraf, session, Scenes, Markup } = require('telegraf');
 const { initDb } = require('./config/db');
 const { mainMenu } = require('./keyboards/mainMenu');
 const { adminMenu } = require('./keyboards/adminMenu');
 const { isAdmin } = require('./utils/auth');
 const User = require('./models/User');
+const Referral = require('./models/Referral');
 const checkSubscription = require('./utils/subscriptionMiddleware');
+const { REFERRAL_BONUS_UNLOCKS } = require('./config/gamification');
 
 // Controllers
 const movieController = require('./controllers/movieController');
@@ -66,6 +68,13 @@ bot.use(async (ctx, next) => {
         } else {
             User.createOrUpdate(ctx.from.id, ctx.from.username, ctx.from.first_name);
         }
+
+        // Daily login streak (awarded at most once per local day)
+        const { awarded, streak, gotBonus } = User.touchStreak(ctx.from.id);
+        if (awarded) {
+            const bonusText = gotBonus ? '\n🎁 Tabriklaymiz! +1 bepul kino ochish qo\'lga kiritdingiz!' : '';
+            ctx.reply(`🔥 Kunlik seriyangiz: ${streak} kun!${bonusText}`).catch(() => { });
+        }
     }
     return next();
 });
@@ -90,6 +99,14 @@ bot.action('check_sub', async (ctx) => {
     }
 
     if (allSubscribed) {
+        // Reward the referrer once the invited user actually subscribes (blocks referral farming)
+        const referral = Referral.find(ctx.from.id);
+        if (referral && !referral.rewarded) {
+            Referral.markRewarded(ctx.from.id);
+            User.addBonusUnlocks(referral.referrer_id, REFERRAL_BONUS_UNLOCKS);
+            ctx.telegram.sendMessage(referral.referrer_id, `🎉 Do'stingiz botga qo'shildi! +${REFERRAL_BONUS_UNLOCKS} bepul kino ochish qo'lga kiritdingiz.`).catch(() => { });
+        }
+
         await ctx.answerCbQuery("✅ Rahmat! Endi botdan foydalanishingiz mumkin.");
         return ctx.editMessageText("🎉 Tabriklaymiz! Barcha kanallarga a'zo bo'ldingiz. Asosiy menyuga o'ting:", mainMenu);
     } else {
@@ -99,6 +116,14 @@ bot.action('check_sub', async (ctx) => {
 
 // Start command
 bot.start((ctx) => {
+    const refMatch = /^ref_(\d+)$/.exec(ctx.startPayload || '');
+    if (refMatch) {
+        const referrerId = parseInt(refMatch[1]);
+        if (User.setReferredBy(ctx.from.id, referrerId)) {
+            Referral.record(ctx.from.id, referrerId);
+        }
+    }
+
     ctx.reply(`Assalomu alaykum, ${ctx.from.first_name}!
 🎬 Kino botiga xush kelibsiz.
 
@@ -143,6 +168,12 @@ bot.hears('📊 Statistika', isAdmin, (ctx) => {
 
 // User Commands - Movies
 bot.hears('🎬 Kinolar', (ctx) => movieController.showGenres(ctx));
+bot.hears('🎲 Tasodifiy kino', (ctx) => movieController.showRandomMovie(ctx));
+
+bot.action('use_bonus_random', (ctx) => movieController.useBonusForRandom(ctx));
+bot.action(/^use_bonus_code_(.+)$/, (ctx) => movieController.useBonusForCode(ctx, ctx.match[1]));
+bot.action('show_referral', (ctx) => profileController.showReferral(ctx));
+bot.hears('🎟 Do\'st taklif qilish', (ctx) => profileController.showReferral(ctx));
 
 // User Commands - Rating
 bot.hears('⭐ Reyting', (ctx) => ratingController.showRatingMenu(ctx));
@@ -199,6 +230,14 @@ bot.action(/^premium_(.+)$/, (ctx) => {
     const plan = ctx.match[1];
     return premiumController.processPayment(ctx, plan);
 });
+
+bot.action(/^payment_confirm_(.+)$/, (ctx) => {
+    ctx.answerCbQuery();
+    return premiumController.confirmPayment(ctx, ctx.match[1]);
+});
+
+bot.action(/^pay_approve_(\d+)$/, isAdmin, (ctx) => premiumController.approvePayment(ctx, parseInt(ctx.match[1])));
+bot.action(/^pay_reject_(\d+)$/, isAdmin, (ctx) => premiumController.rejectPayment(ctx, parseInt(ctx.match[1])));
 
 // User Commands - Code Input
 let waitingForCode = {};
@@ -261,6 +300,7 @@ bot.hears('⬅️ Orqaga', (ctx) => ctx.reply('Asosiy menyu', mainMenu));
 // Launch bot
 bot.launch().then(() => {
     console.log('✅ Bot started successfully');
+    require('./jobs/progrevJob').start(bot.telegram);
 }).catch((err) => {
     console.error('❌ Bot failed to start:', err);
 });
