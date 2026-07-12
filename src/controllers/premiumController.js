@@ -66,22 +66,19 @@ To'lov uchun quyidagi tugmalardan birini tanlang:
                 ? `📱 <code>${escapeHtml(card.number)}</code>${card.holderName ? ` (${escapeHtml(card.holderName)})` : ''}`
                 : '⏳ Karta tez orada qo\'shiladi';
 
+            const planLabel = plan === 'lifetime' ? 'Umrbod' : plan.replace('m', ' oy');
+
             const paymentInfo = `
 💳 <b>To'lov ma'lumotlari</b>
 
-<b>Tarif:</b> ${plan === 'lifetime' ? 'Umrbod' : plan.replace('m', ' oy')}
-<b>Narx:</b> ${selectedPlan.price} so'm
+<b>Tarif:</b> ${planLabel}
 
-<b>To'lov qilish:</b>
-1. Quyidagi karta raqamiga pul o'tkazing:
-   ${cardText}
+Quyidagi kartaga <b>${selectedPlan.price} so'm</b> summasini o'tkazing:
+${cardText}
 
-2. To'lov chekini adminga yuboring:
-   👤 @admin_username
+✅ To'lovni amalga oshirgach, kino kodini kiriting.
 
-3. Admin tasdiqlashidan keyin Premium faollashadi
-
-❗️ To'lov chekida Telegram username yoki ID ko'rsatilgan bo'lishi kerak.
+❗️ Savol yoki muammo bo'lsa, admin bilan bog'laning: @admin_username
             `.trim();
 
             await ctx.editMessageText(paymentInfo, {
