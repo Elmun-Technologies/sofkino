@@ -39,6 +39,12 @@ if (!process.env.BOT_TOKEN) {
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const stage = new Scenes.Stage([addGenreScene, broadcastScene, editProfileScene, createTicketScene, manageChannelsScene]);
 
+// Safety net: an error thrown anywhere in the middleware chain would otherwise
+// crash the whole process and take the bot offline for every user.
+bot.catch((err, ctx) => {
+    console.error(`Bot error for update ${ctx.update?.update_id}:`, err);
+});
+
 // Middleware
 bot.use(session());
 bot.use(stage.middleware());
