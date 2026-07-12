@@ -209,11 +209,12 @@ bot.hears('🔑 Kod kiritish', (ctx) => {
 });
 
 // Handle code input
-bot.on('text', (ctx) => {
+bot.on('text', (ctx, next) => {
     if (waitingForCode[ctx.from.id]) {
         delete waitingForCode[ctx.from.id];
         return movieController.unlockByCode(ctx, ctx.message.text);
     }
+    return next();
 });
 
 // Help
