@@ -8,7 +8,7 @@ const app = express();
 const PORT = process.env.ADMIN_PORT || 3000;
 
 // Database connection (shared with bot)
-const dbPath = path.resolve(__dirname, '../../database.sqlite');
+const dbPath = process.env.DB_PATH || path.resolve(__dirname, '../../database.sqlite');
 const db = new sqlite3.Database(dbPath);
 
 // Simple wrapper to make sqlite3 work like better-sqlite3
