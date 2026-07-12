@@ -1,28 +1,43 @@
 const { db } = require('../config/db');
 
 class Movie {
-    static create(movie) {
-        const { title, description, genreId, fileId, accessCode, isPremiumOnly, rating, country, releaseYear, externalLink, telegramLink, externalLinkWeb } = movie;
-        const stmt = db.prepare(`
-            INSERT INTO movies (title, description, genre_id, file_id, access_code, is_premium_only, rating, country, release_year, external_link, telegram_link, external_link_web)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-        return stmt.run(title, description, genreId, fileId, accessCode, isPremiumOnly ? 1 : 0, rating || 0, country, releaseYear, externalLink, telegramLink, externalLinkWeb);
-    }
-
     static findByCode(code) {
-        const stmt = db.prepare('SELECT * FROM movies WHERE access_code = ?');
+        const stmt = db.prepare("SELECT * FROM movies WHERE access_code = ? AND status = 'published'");
         return stmt.get(code);
     }
 
     static findByGenre(genreId) {
-        const stmt = db.prepare('SELECT * FROM movies WHERE genre_id = ?');
+        const stmt = db.prepare("SELECT * FROM movies WHERE genre_id = ? AND status = 'published'");
         return stmt.all(genreId);
     }
 
     static getTopByGenre(genreId, limit = 10) {
-        const stmt = db.prepare('SELECT * FROM movies WHERE genre_id = ? ORDER BY views_count DESC, rating DESC LIMIT ?');
+        const stmt = db.prepare("SELECT * FROM movies WHERE genre_id = ? AND status = 'published' ORDER BY views_count DESC, rating DESC LIMIT ?");
         return stmt.all(genreId, limit);
+    }
+
+    static createPending({ fileId, sourceChannelId, sourceMessageId }) {
+        const stmt = db.prepare(`
+            INSERT INTO movies (title, file_id, source_channel_id, source_message_id, status)
+            VALUES ('⏳ Kutilmoqda', ?, ?, ?, 'pending')
+        `);
+        return stmt.run(fileId, String(sourceChannelId), sourceMessageId);
+    }
+
+    static getPending() {
+        return db.prepare("SELECT * FROM movies WHERE status = 'pending' ORDER BY id DESC").all();
+    }
+
+    static publish(id, movie) {
+        const { title, description, genreId, accessCode, isPremiumOnly, rating, country, releaseYear, externalLink, telegramLink, externalLinkWeb } = movie;
+        const stmt = db.prepare(`
+            UPDATE movies
+            SET title = ?, description = ?, genre_id = ?, access_code = ?, is_premium_only = ?, rating = ?,
+                country = ?, release_year = ?, external_link = ?, telegram_link = ?, external_link_web = ?,
+                status = 'published'
+            WHERE id = ? AND status = 'pending'
+        `);
+        return stmt.run(title, description, genreId, accessCode, isPremiumOnly ? 1 : 0, rating || 0, country, releaseYear, externalLink, telegramLink, externalLinkWeb, id);
     }
 
     static getAll(limit = 50, offset = 0) {
@@ -40,7 +55,7 @@ class Movie {
     }
 
     static getTopRated(limit = 10) {
-        const stmt = db.prepare('SELECT * FROM movies WHERE rating > 0 ORDER BY rating DESC, views_count DESC LIMIT ?');
+        const stmt = db.prepare("SELECT * FROM movies WHERE rating > 0 AND status = 'published' ORDER BY rating DESC, views_count DESC LIMIT ?");
         return stmt.all(limit);
     }
 

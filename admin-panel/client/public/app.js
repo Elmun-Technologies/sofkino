@@ -93,7 +93,6 @@ document.querySelectorAll('.nav-link').forEach(link => {
 });
 
 // Movie Management Initializers
-document.getElementById('add-movie-btn').addEventListener('click', openAddMovieModal);
 document.getElementById('close-add-movie').addEventListener('click', () => {
     document.getElementById('add-movie-modal').style.display = 'none';
 });
@@ -102,52 +101,7 @@ document.getElementById('random-code-btn').addEventListener('click', () => {
     document.getElementById('movie-access-code').value = random(1, 10000);
 });
 
-// File input change handler and Drag & Drop
-const movieFileInput = document.getElementById('movie-file-input');
-const dropzone = document.getElementById('dropzone');
-
-if (movieFileInput && dropzone) {
-    movieFileInput.addEventListener('change', function () {
-        handleFileSelect(this.files[0]);
-    });
-
-    dropzone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropzone.classList.add('active');
-        dropzone.style.borderColor = 'white';
-    });
-
-    dropzone.addEventListener('dragleave', () => {
-        dropzone.classList.remove('active');
-        dropzone.style.borderColor = '#667eea';
-    });
-
-    dropzone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropzone.classList.remove('active');
-        const files = e.dataTransfer.files;
-        if (files.length) {
-            movieFileInput.files = files;
-            handleFileSelect(files[0]);
-        }
-    });
-}
-
-function handleFileSelect(file) {
-    const fileNameDisplay = document.getElementById('file-name-display');
-    const dzone = document.getElementById('dropzone');
-    if (file) {
-        fileNameDisplay.textContent = '✅ ' + file.name;
-        fileNameDisplay.style.color = '#10b981';
-        dzone.classList.add('active');
-        dzone.style.borderColor = '#10b981';
-    } else {
-        fileNameDisplay.textContent = 'Kino faylini tanlang yoki sudrab keling';
-        fileNameDisplay.style.color = 'white';
-        dzone.classList.remove('active');
-        dzone.style.borderColor = '#667eea';
-    }
-}
+document.getElementById('add-movie-form').addEventListener('submit', handleAddMovie);
 
 // Channel management initializers
 document.getElementById('add-channel-btn').addEventListener('click', () => {
@@ -189,9 +143,10 @@ document.getElementById('users-filter-form').addEventListener('submit', (e) => {
     loadUsers(filters);
 });
 
-async function openAddMovieModal() {
+async function openPublishModal(pendingId) {
     const modal = document.getElementById('add-movie-modal');
     modal.style.display = 'block';
+    document.getElementById('movie-pending-id').value = pendingId;
 
     // Load genres into select
     try {
@@ -206,26 +161,56 @@ async function openAddMovieModal() {
     }
 }
 
+async function loadPendingMovies() {
+    const listEl = document.getElementById('pending-movies-list');
+    try {
+        const res = await fetch(`${API_URL}/movies/pending`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const pending = await res.json();
+
+        if (pending.length === 0) {
+            listEl.innerHTML = '<p style="color: #8b92b0;">Hozircha kutilayotgan video yo\'q. Videoni saqlash kanaliga yuboring.</p>';
+            return;
+        }
+
+        listEl.innerHTML = pending.map(p => `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #0f1429; border: 1px solid #1e2542; border-radius: 10px; margin-bottom: 10px;">
+                <span style="color: #8b92b0;">🎞️ Yangi video keldi, vaqti: ${p.created_at || 'N/A'}</span>
+                <button onclick="openPublishModal(${p.id})" class="btn-primary" style="margin: 0; padding: 8px 16px;">✅ Nashr qilish</button>
+            </div>
+        `).join('');
+    } catch (err) {
+        console.error('loadPendingMovies error:', err);
+        listEl.innerHTML = `<p style="color: #ef4444;">Xatolik: ${err.message}</p>`;
+    }
+}
+
 async function handleAddMovie(e) {
     e.preventDefault();
     const form = e.target;
-    const formData = new FormData(form);
+    const data = Object.fromEntries(new FormData(form).entries());
+    const pendingId = data.pendingId;
 
     try {
         const saveBtn = form.querySelector('button[type="submit"]');
         const originalText = saveBtn.textContent;
-        saveBtn.textContent = 'Yuklanmoqda...';
+        saveBtn.textContent = 'Saqlanmoqda...';
         saveBtn.disabled = true;
 
-        const res = await fetch(`${API_URL}/movies`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}` },
-            body: formData
+        const res = await fetch(`${API_URL}/movies/${pendingId}/publish`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
         });
 
         const result = await res.json();
         if (result.success) {
             form.reset();
+            document.getElementById('add-movie-modal').style.display = 'none';
             loadMovies();
         } else {
             alert('Xatolik: ' + (result.error || 'Noma\'lum xato'));
@@ -733,6 +718,8 @@ function updatePaymentMethodsUI(total) {
 async function loadMovies() {
     const listEl = document.getElementById('movies-list');
     const topRowEl = document.getElementById('movies-top-row');
+
+    loadPendingMovies();
 
     try {
         const country = document.getElementById('movie-filter-country').value;

@@ -432,9 +432,16 @@
                     <div class="dashboard-header">
                         <div>
                             <h1>🎬 KINOLAR BAZASI</h1>
-                            <p class="subtitle">Barcha kinolar nazorati va chuqur analitika shu yerda.</p>
+                            <p class="subtitle">Kino qo'shish uchun videoni saqlash kanaliga yuboring, u shu yerda paydo bo'ladi.</p>
                         </div>
-                        <button id="add-movie-btn" class="btn-primary" style="margin: 0;">➕ YANGI KINO</button>
+                    </div>
+
+                    <!-- Pending movies captured from the storage channel -->
+                    <div style="background: #141a2e; border: 1px solid #1e2542; padding: 25px; border-radius: 16px; margin-bottom: 30px;">
+                        <h3 style="color: #f59e0b; margin-bottom: 15px;">⏳ KUTILAYOTGAN VIDEOLAR</h3>
+                        <div id="pending-movies-list">
+                            <p style="color: #8b92b0;">Yuklanmoqda...</p>
+                        </div>
                     </div>
 
                     <!-- Top Performing Movies Row (NEW) -->
@@ -655,8 +662,10 @@
     <div id="add-movie-modal" class="modal">
         <div class="modal-content">
             <span class="close-modal" id="close-add-movie">&times;</span>
-            <h2 style="color: #667eea; margin-bottom: 25px;">🎬 YANGI KINO QO'SHISH (OPTIMAL UI)</h2>
+            <h2 style="color: #667eea; margin-bottom: 25px;">🎬 KINONI NASHR QILISH</h2>
+            <p style="color: #8b92b0; font-size: 12px; margin-top: -15px; margin-bottom: 20px;">Video kanaldan olindi. Endi kino ma'lumotlarini to'ldiring.</p>
             <form id="add-movie-form">
+                <input type="hidden" name="pendingId" id="movie-pending-id">
                 <div class="form-row">
                     <div class="form-group">
                         <label>🎬 KINO NOMI</label>
@@ -704,31 +713,16 @@
 
                 <div
                     style="margin-top: 20px; padding: 20px; background: rgba(102, 126, 234, 0.05); border: 1px dashed #1e2542; border-radius: 12px;">
-                    <h4 style="margin-bottom: 15px; color: #667eea;">🔗 MANBALAR VA YUKLASH</h4>
+                    <h4 style="margin-bottom: 15px; color: #667eea;">🔗 IXTIYORIY HAVOLALAR</h4>
 
                     <div class="form-row">
                         <div class="form-group">
-                            <label>🔵 TELEGRAM LINK (Bot manbasi)</label>
+                            <label>🔵 TELEGRAM LINK (ixtiyoriy)</label>
                             <input type="text" name="telegramLink" placeholder="t.me/c/12345/6789">
                         </div>
                         <div class="form-group">
-                            <label>🌐 TASHQI HAVOLA (WEB)</label>
-                            <input type="text" name="externalLinkWeb" placeholder="https://example.com/movie.mp4">
-                        </div>
-                    </div>
-
-                    <div class="form-group" id="file-upload-section">
-                        <label>📂 FILMNI YUKLASH (MAX 2GB)</label>
-                        <div id="dropzone" class="file-upload-dropzone"
-                            onclick="document.getElementById('movie-file-input').click()">
-                            <div style="font-size: 60px; margin-bottom: 15px;">🎞️</div>
-                            <span id="file-name-display"
-                                style="color: white; font-weight: 600; font-size: 16px; display: block; margin-bottom: 5px;">Kino
-                                faylini tanlang yoki sudrab keling</span>
-                            <p style="color: #8b92b0; font-size: 12px;">Telegram va Web uchun optimal formatlar: .mp4,
-                                .mkv</p>
-                            <input type="file" id="movie-file-input" name="file" accept="video/*"
-                                style="display: none;">
+                            <label>🌐 TASHQI HAVOLA (WEB, ixtiyoriy)</label>
+                            <input type="text" name="externalLinkWeb" placeholder="https://example.com/movie">
                         </div>
                     </div>
                 </div>

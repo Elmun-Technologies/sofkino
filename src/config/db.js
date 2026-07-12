@@ -66,6 +66,12 @@ const initDb = () => {
         )
     `);
 
+    // Migrations for movies captured from the storage channel
+    try { db.exec("ALTER TABLE movies ADD COLUMN status TEXT DEFAULT 'published'"); } catch (e) { }
+    try { db.exec('ALTER TABLE movies ADD COLUMN source_channel_id TEXT'); } catch (e) { }
+    try { db.exec('ALTER TABLE movies ADD COLUMN source_message_id INTEGER'); } catch (e) { }
+    try { db.exec('ALTER TABLE movies ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP'); } catch (e) { }
+
     // Movie Likes
     db.exec(`
         CREATE TABLE IF NOT EXISTS movie_likes (

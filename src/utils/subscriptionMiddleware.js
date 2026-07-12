@@ -7,6 +7,11 @@ const checkSubscription = async (ctx, next) => {
         return next();
     }
 
+    // Channel posts and other updates without a sender have no user to check
+    if (!ctx.from) {
+        return next();
+    }
+
     // Skip for admins (optional, but usually helpful)
     const adminId = parseInt(process.env.ADMIN_ID);
     if (ctx.from && ctx.from.id === adminId) {

@@ -14,10 +14,10 @@ const premiumController = require('./controllers/premiumController');
 const ratingController = require('./controllers/ratingController');
 const newsController = require('./controllers/newsController');
 const helpController = require('./controllers/helpController');
+const Movie = require('./models/Movie');
 
 // Scenes
 const addGenreScene = require('./scenes/addGenreScene');
-const addMovieScene = require('./scenes/addMovieScene');
 const broadcastScene = require('./scenes/broadcastScene');
 const editProfileScene = require('./scenes/editProfileScene');
 const createTicketScene = require('./scenes/createTicketScene');
@@ -37,7 +37,7 @@ if (!process.env.BOT_TOKEN) {
 }
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
-const stage = new Scenes.Stage([addGenreScene, addMovieScene, broadcastScene, editProfileScene, createTicketScene, manageChannelsScene]);
+const stage = new Scenes.Stage([addGenreScene, broadcastScene, editProfileScene, createTicketScene, manageChannelsScene]);
 
 // Middleware
 bot.use(session());
@@ -72,6 +72,31 @@ bot.use(async (ctx, next) => {
 
 // Mandatory Subscription Check
 bot.use(checkSubscription);
+
+// Movie ingestion from the storage channel
+bot.on('channel_post', (ctx, next) => {
+    const post = ctx.channelPost;
+    console.log('STORAGE CHANNEL ID:', post.chat.id);
+
+    const storageChannelId = process.env.STORAGE_CHANNEL_ID;
+    if (storageChannelId && String(post.chat.id) === String(storageChannelId)) {
+        const file = post.video || post.document;
+        if (file) {
+            try {
+                Movie.createPending({
+                    fileId: file.file_id,
+                    sourceChannelId: post.chat.id,
+                    sourceMessageId: post.message_id
+                });
+                console.log(`Pending movie captured from channel post ${post.message_id}`);
+            } catch (err) {
+                console.error('Failed to save pending movie:', err);
+            }
+        }
+    }
+
+    return next();
+});
 
 bot.action('check_sub', async (ctx) => {
     const activeChannels = require('./models/Channel').getAll(true);
@@ -111,7 +136,6 @@ bot.command('admin', isAdmin, (ctx) => {
 });
 
 bot.hears('➕ Janr qo\'shish', isAdmin, (ctx) => ctx.scene.enter('ADD_GENRE_SCENE'));
-bot.hears('➕ Kino qo\'shish', isAdmin, (ctx) => ctx.scene.enter('ADD_MOVIE_SCENE'));
 bot.hears('👥 Foydalanuvchilar', isAdmin, (ctx) => {
     const { db } = require('./config/db');
     const users = db.prepare('SELECT * FROM users ORDER BY joined_at DESC LIMIT 20').all();

@@ -1,7 +1,7 @@
 const { Markup } = require('telegraf');
 
 const adminMenu = Markup.keyboard([
-    ['➕ Kino qo\'shish', '➕ Janr qo\'shish'],
+    ['➕ Janr qo\'shish'],
     ['📊 Statistika', '👥 Foydalanuvchilar'],
     ['📤 Xabar yuborish', '📢 Kanallar'],
     ['⬅️ Bosh menyu']

@@ -1,26 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const authMiddleware = require('../middleware/auth');
-const multer = require('multer');
-const path = require('path');
 const { db } = require('../server');
 
-// File upload configuration
-const storage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        cb(null, path.join(__dirname, '../../../uploads'));
-    },
-    filename: (req, file, cb) => {
-        cb(null, Date.now() + '-' + file.originalname);
-    }
-});
-
-const upload = multer({
-    storage,
-    limits: { fileSize: 2 * 1024 * 1024 * 1024 } // 2GB max
-});
-
-// Get all movies with advanced filters (Skvoznaya)
+// Get all published movies with advanced filters (Skvoznaya)
 router.get('/', authMiddleware, async (req, res) => {
     try {
         const { country, age, search, interest } = req.query;
@@ -30,7 +13,7 @@ router.get('/', authMiddleware, async (req, res) => {
             LEFT JOIN genres g ON m.genre_id = g.id
             LEFT JOIN movie_views mv ON m.id = mv.movie_id
             LEFT JOIN users u ON mv.user_id = u.telegram_id
-            WHERE 1=1
+            WHERE m.status = 'published'
         `;
         const params = [];
 
@@ -65,9 +48,21 @@ router.get('/', authMiddleware, async (req, res) => {
     }
 });
 
-// Add movie
-router.post('/', authMiddleware, upload.single('file'), async (req, res) => {
+// Movies captured from the storage channel that still need title/code/genre
+router.get('/pending', authMiddleware, async (req, res) => {
     try {
+        const pending = await db.prepare("SELECT id, created_at FROM movies WHERE status = 'pending' ORDER BY id DESC").all([]);
+        res.json(pending);
+    } catch (err) {
+        console.error('Fetch pending movies error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Fill in a pending movie's metadata and publish it
+router.put('/:id/publish', authMiddleware, async (req, res) => {
+    try {
+        const { id } = req.params;
         const { title, description, genreId, country, releaseYear, externalLink, telegramLink, externalLinkWeb, isPremiumOnly, rating, customCode } = req.body;
 
         // Use custom code if provided, otherwise generate random (1-10000)
@@ -76,20 +71,16 @@ router.post('/', authMiddleware, upload.single('file'), async (req, res) => {
             accessCode = Math.floor(Math.random() * 10000) + 1;
         }
 
-        // File ID or external link
-        const fileId = req.file ? req.file.filename : null;
-
-        // Ensure access_code is unique (basic check or catch error)
-        const stmt = db.prepare(`
-            INSERT INTO movies (title, description, genre_id, file_id, access_code, is_premium_only, rating, country, release_year, external_link, telegram_link, external_link_web)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `);
-
-        const result = await stmt.run([
+        const result = await db.prepare(`
+            UPDATE movies
+            SET title = ?, description = ?, genre_id = ?, access_code = ?, is_premium_only = ?, rating = ?,
+                country = ?, release_year = ?, external_link = ?, telegram_link = ?, external_link_web = ?,
+                status = 'published'
+            WHERE id = ? AND status = 'pending'
+        `).run([
             title,
             description,
             genreId,
-            fileId,
             accessCode.toString(),
             isPremiumOnly === 'true' || isPremiumOnly === 1 || isPremiumOnly === '1' ? 1 : 0,
             parseFloat(rating) || 0,
@@ -97,33 +88,32 @@ router.post('/', authMiddleware, upload.single('file'), async (req, res) => {
             parseInt(releaseYear) || null,
             externalLink || null,
             telegramLink || null,
-            externalLinkWeb || null
+            externalLinkWeb || null,
+            id
         ]);
 
-        res.json({
-            success: true,
-            movieId: result.lastID,
-            accessCode
-        });
+        if (result.changes === 0) {
+            return res.status(404).json({ error: 'Kutilayotgan video topilmadi yoki allaqachon nashr qilingan' });
+        }
+
+        res.json({ success: true, accessCode });
     } catch (err) {
-        console.error('Error adding movie:', err);
+        console.error('Error publishing movie:', err);
         res.status(500).json({ error: err.message });
     }
 });
 
-// Update movie
-router.put('/:id', authMiddleware, (req, res) => {
+// Update an already published movie
+router.put('/:id', authMiddleware, async (req, res) => {
     try {
         const { id } = req.params;
         const { title, description, genreId, country, releaseYear, externalLink, telegramLink, externalLinkWeb, isPremiumOnly, rating } = req.body;
 
-        const stmt = db.prepare(`
-            UPDATE movies 
+        await db.prepare(`
+            UPDATE movies
             SET title = ?, description = ?, genre_id = ?, country = ?, release_year = ?, external_link = ?, telegram_link = ?, external_link_web = ?, is_premium_only = ?, rating = ?
             WHERE id = ?
-        `);
-
-        stmt.run(title, description, genreId, country, releaseYear, externalLink, telegramLink, externalLinkWeb, isPremiumOnly === 'true' || isPremiumOnly === 1 || isPremiumOnly === '1' ? 1 : 0, rating || 0, id);
+        `).run([title, description, genreId, country, releaseYear, externalLink, telegramLink, externalLinkWeb, isPremiumOnly === 'true' || isPremiumOnly === 1 || isPremiumOnly === '1' ? 1 : 0, rating || 0, id]);
 
         res.json({ success: true });
     } catch (err) {
@@ -132,10 +122,10 @@ router.put('/:id', authMiddleware, (req, res) => {
 });
 
 // Delete movie
-router.delete('/:id', authMiddleware, (req, res) => {
+router.delete('/:id', authMiddleware, async (req, res) => {
     try {
         const { id } = req.params;
-        db.prepare('DELETE FROM movies WHERE id = ?').run(id);
+        await db.prepare('DELETE FROM movies WHERE id = ?').run([id]);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
