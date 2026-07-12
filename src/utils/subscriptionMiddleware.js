@@ -8,8 +8,8 @@ const checkSubscription = async (ctx, next) => {
     }
 
     // Skip for admins (optional, but usually helpful)
-    const { isAdmin } = require('./auth');
-    if (isAdmin({ from: ctx.from })) {
+    const adminId = parseInt(process.env.ADMIN_ID);
+    if (ctx.from && ctx.from.id === adminId) {
         return next();
     }
 
