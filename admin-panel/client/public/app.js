@@ -177,6 +177,10 @@ async function loadPendingMovies() {
         });
         const pending = await res.json();
 
+        if (!Array.isArray(pending)) {
+            throw new Error(pending?.error || `Server javobi noto'g'ri (status ${res.status})`);
+        }
+
         if (pending.length === 0) {
             listEl.innerHTML = '<p style="color: #8b92b0;">Hozircha kutilayotgan video yo\'q. Videoni saqlash kanaliga yuboring.</p>';
             return;
@@ -766,6 +770,11 @@ async function loadMovies() {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const movies = await res.json();
+
+        if (!Array.isArray(movies)) {
+            throw new Error(movies?.error || `Server javobi noto'g'ri (status ${res.status})`);
+        }
+
         const displayMovies = movies;
 
         const sortedMovies = [...displayMovies].sort((a, b) => (b.views_count || 0) - (a.views_count || 0));
