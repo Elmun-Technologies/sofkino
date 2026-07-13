@@ -294,19 +294,26 @@ const movieController = {
     },
 
     // Spends one bonus_unlock earned from streaks/referrals to get another random movie.
+    // Checks a movie is actually available BEFORE spending, so a bonus is never
+    // wasted on a delivery that turns out to be impossible.
     async useBonusForRandom(ctx) {
-        const spent = User.useBonusUnlock(ctx.from.id);
-        if (!spent) {
+        const user = User.findById(ctx.from.id);
+        if (!user || user.bonus_unlocks <= 0) {
             return ctx.answerCbQuery('❌ Sizda bepul ochish qolmagan', { show_alert: true });
         }
 
         const seenTodayIds = randomViewedTodayIds(ctx.from.id);
         const movie = Movie.getRandom({ excludeIds: seenTodayIds });
-        await ctx.answerCbQuery();
-
         if (!movie) {
+            await ctx.answerCbQuery();
             return ctx.reply('❌ Hozircha bazada kino yo\'q.');
         }
+
+        const spent = User.useBonusUnlock(ctx.from.id);
+        if (!spent) {
+            return ctx.answerCbQuery('❌ Sizda bepul ochish qolmagan', { show_alert: true });
+        }
+        await ctx.answerCbQuery();
 
         logView(ctx.from.id, movie.id, 'paid');
         const latestMovie = Movie.findById(movie.id);
@@ -319,7 +326,19 @@ const movieController = {
     },
 
     // Spends one bonus_unlock to unlock a specific code-locked movie beyond the monthly quota.
+    // Confirms the movie still exists BEFORE spending the bonus.
     async useBonusForCode(ctx, code) {
+        const user = User.findById(ctx.from.id);
+        if (!user || user.bonus_unlocks <= 0) {
+            return ctx.answerCbQuery('❌ Sizda bepul ochish qolmagan', { show_alert: true });
+        }
+
+        const movie = Movie.findByCode(code.trim());
+        if (!movie) {
+            await ctx.answerCbQuery();
+            return ctx.reply('❌ Bunday kodli kino topilmadi. Kodni qayta tekshiring.');
+        }
+
         const spent = User.useBonusUnlock(ctx.from.id);
         if (!spent) {
             return ctx.answerCbQuery('❌ Sizda bepul ochish qolmagan', { show_alert: true });

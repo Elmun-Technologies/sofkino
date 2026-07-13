@@ -5,9 +5,8 @@ const { mainMenu } = require('./keyboards/mainMenu');
 const { adminMenu } = require('./keyboards/adminMenu');
 const { isAdmin } = require('./utils/auth');
 const User = require('./models/User');
-const Referral = require('./models/Referral');
 const checkSubscription = require('./utils/subscriptionMiddleware');
-const { REFERRAL_BONUS_UNLOCKS } = require('./config/gamification');
+const { captureReferral, rewardReferralIfPending } = require('./utils/referralReward');
 
 // Controllers
 const movieController = require('./controllers/movieController');
@@ -75,6 +74,12 @@ bot.use(async (ctx, next) => {
             const bonusText = gotBonus ? '\n🎁 Tabriklaymiz! +1 bepul kino ochish qo\'lga kiritdingiz!' : '';
             ctx.reply(`🔥 Kunlik seriyangiz: ${streak} kun!${bonusText}`).catch(() => { });
         }
+
+        // Capture the referral payload here — BEFORE the mandatory-subscription
+        // gate below — so it's recorded even if this brand-new user hasn't
+        // joined the required channels yet (checkSubscription would otherwise
+        // block the update before bot.start's own handler ever ran).
+        captureReferral(ctx.from.id, ctx.message && ctx.message.text);
     }
     return next();
 });
@@ -100,12 +105,7 @@ bot.action('check_sub', async (ctx) => {
 
     if (allSubscribed) {
         // Reward the referrer once the invited user actually subscribes (blocks referral farming)
-        const referral = Referral.find(ctx.from.id);
-        if (referral && !referral.rewarded) {
-            Referral.markRewarded(ctx.from.id);
-            User.addBonusUnlocks(referral.referrer_id, REFERRAL_BONUS_UNLOCKS);
-            ctx.telegram.sendMessage(referral.referrer_id, `🎉 Do'stingiz botga qo'shildi! +${REFERRAL_BONUS_UNLOCKS} bepul kino ochish qo'lga kiritdingiz.`).catch(() => { });
-        }
+        await rewardReferralIfPending(ctx.telegram, ctx.from.id).catch(() => { });
 
         await ctx.answerCbQuery("✅ Rahmat! Endi botdan foydalanishingiz mumkin.");
         return ctx.editMessageText("🎉 Tabriklaymiz! Barcha kanallarga a'zo bo'ldingiz. Asosiy menyuga o'ting:", mainMenu);
@@ -115,15 +115,9 @@ bot.action('check_sub', async (ctx) => {
 });
 
 // Start command
+// (Referral capture already happened earlier in the tracking middleware,
+// before the mandatory-subscription gate — see captureReferral above.)
 bot.start((ctx) => {
-    const refMatch = /^ref_(\d+)$/.exec(ctx.startPayload || '');
-    if (refMatch) {
-        const referrerId = parseInt(refMatch[1]);
-        if (User.setReferredBy(ctx.from.id, referrerId)) {
-            Referral.record(ctx.from.id, referrerId);
-        }
-    }
-
     ctx.reply(`Assalomu alaykum, ${ctx.from.first_name}!
 🎬 Kino botiga xush kelibsiz.
 
