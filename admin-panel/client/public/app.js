@@ -151,12 +151,7 @@ document.getElementById('users-filter-form').addEventListener('submit', (e) => {
     loadUsers(filters);
 });
 
-async function openPublishModal(pendingId) {
-    const modal = document.getElementById('add-movie-modal');
-    modal.style.display = 'block';
-    document.getElementById('movie-pending-id').value = pendingId;
-
-    // Load genres into select
+async function loadGenreOptions(selectedGenreId) {
     try {
         const res = await fetch(`${API_URL}/genres`, {
             headers: { 'Authorization': `Bearer ${token}` }
@@ -164,9 +159,52 @@ async function openPublishModal(pendingId) {
         const genres = await res.json();
         const select = document.getElementById('movie-genre-select');
         select.innerHTML = genres.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+        if (selectedGenreId) select.value = selectedGenreId;
     } catch (err) {
         console.error('Error loading genres:', err);
     }
+}
+
+async function openPublishModal(pendingId) {
+    const form = document.getElementById('add-movie-form');
+    form.reset();
+    document.getElementById('movie-pending-id').value = pendingId;
+    document.getElementById('movie-edit-id').value = '';
+    document.getElementById('add-movie-title').textContent = '🎬 KINONI NASHR QILISH';
+    document.getElementById('add-movie-subtitle').textContent = 'Video kanaldan olindi. Endi kino ma\'lumotlarini to\'ldiring.';
+    document.getElementById('add-movie-submit').textContent = 'SAQLASH VA CHOP ETISH';
+    document.getElementById('movie-access-code').closest('.form-group').style.display = '';
+
+    document.getElementById('add-movie-modal').style.display = 'block';
+    await loadGenreOptions();
+}
+
+// Edit an already-published movie (title/description/genre etc). Looks the
+// movie up from the last loaded /movies list rather than refetching it.
+async function editMovie(id) {
+    const movie = lastLoadedMovies.find(m => m.id === id);
+    if (!movie) return alert('Kino topilmadi. Sahifani yangilang.');
+
+    const form = document.getElementById('add-movie-form');
+    form.reset();
+    document.getElementById('movie-pending-id').value = '';
+    document.getElementById('movie-edit-id').value = id;
+    document.getElementById('add-movie-title').textContent = '✏️ KINONI TAHRIRLASH';
+    document.getElementById('add-movie-subtitle').textContent = `Kod: ${movie.access_code}. Ma'lumotlarni tahrirlab, saqlang.`;
+    document.getElementById('add-movie-submit').textContent = 'O\'ZGARISHLARNI SAQLASH';
+
+    form.querySelector('[name="title"]').value = movie.title || '';
+    form.querySelector('[name="description"]').value = movie.description || '';
+    form.querySelector('[name="country"]').value = movie.country || '';
+    form.querySelector('[name="releaseYear"]').value = movie.release_year || '';
+    form.querySelector('[name="rating"]').value = movie.rating || '';
+    form.querySelector('[name="telegramLink"]').value = movie.telegram_link || '';
+    form.querySelector('[name="externalLinkWeb"]').value = movie.external_link_web || '';
+
+    document.getElementById('movie-access-code').closest('.form-group').style.display = 'none';
+
+    document.getElementById('add-movie-modal').style.display = 'block';
+    await loadGenreOptions(movie.genre_id);
 }
 
 async function loadPendingMovies() {
@@ -232,7 +270,10 @@ async function handleAddMovie(e) {
     e.preventDefault();
     const form = e.target;
     const data = Object.fromEntries(new FormData(form).entries());
-    const pendingId = data.pendingId;
+    const isEdit = !!data.editId;
+    const url = isEdit
+        ? `${API_URL}/movies/${data.editId}`
+        : `${API_URL}/movies/${data.pendingId}/publish`;
 
     try {
         const saveBtn = form.querySelector('button[type="submit"]');
@@ -240,7 +281,7 @@ async function handleAddMovie(e) {
         saveBtn.textContent = 'Saqlanmoqda...';
         saveBtn.disabled = true;
 
-        const res = await fetch(`${API_URL}/movies/${pendingId}/publish`, {
+        const res = await fetch(url, {
             method: 'PUT',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -748,6 +789,8 @@ function updatePaymentMethodsUI(methods) {
 }
 
 // Load Movies with Top Performers and Filters
+let lastLoadedMovies = [];
+
 async function loadMovies() {
     const listEl = document.getElementById('movies-list');
     const topRowEl = document.getElementById('movies-top-row');
@@ -776,6 +819,7 @@ async function loadMovies() {
         }
 
         const displayMovies = movies;
+        lastLoadedMovies = movies;
 
         const sortedMovies = [...displayMovies].sort((a, b) => (b.views_count || 0) - (a.views_count || 0));
         const topMovies = sortedMovies.slice(0, 4);
@@ -872,6 +916,7 @@ async function loadMovies() {
                             <td>
                                 <div style="display: flex; gap: 8px;">
                                     <button onclick="showMovieAnalytics(${m.id})" class="btn-stat-mini">📊 ANALITIKA</button>
+                                    <button onclick="editMovie(${m.id})" title="Tahrirlash" style="background: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.2); padding: 8px 12px; border-radius: 6px; cursor: pointer;">✏️</button>
                                     <button onclick="deleteMovie(${m.id})" class="btn-delete-mini">🗑</button>
                                 </div>
                             </td>

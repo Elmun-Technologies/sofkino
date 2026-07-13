@@ -674,10 +674,11 @@
     <div id="add-movie-modal" class="modal">
         <div class="modal-content">
             <span class="close-modal" id="close-add-movie">&times;</span>
-            <h2 style="color: #667eea; margin-bottom: 25px;">🎬 KINONI NASHR QILISH</h2>
-            <p style="color: #8b92b0; font-size: 12px; margin-top: -15px; margin-bottom: 20px;">Video kanaldan olindi. Endi kino ma'lumotlarini to'ldiring.</p>
+            <h2 id="add-movie-title" style="color: #667eea; margin-bottom: 25px;">🎬 KINONI NASHR QILISH</h2>
+            <p id="add-movie-subtitle" style="color: #8b92b0; font-size: 12px; margin-top: -15px; margin-bottom: 20px;">Video kanaldan olindi. Endi kino ma'lumotlarini to'ldiring.</p>
             <form id="add-movie-form">
                 <input type="hidden" name="pendingId" id="movie-pending-id">
+                <input type="hidden" name="editId" id="movie-edit-id">
                 <div class="form-row">
                     <div class="form-group">
                         <label>🎬 KINO NOMI</label>
@@ -740,7 +741,7 @@
                 </div>
 
                 <div style="display: flex; gap: 10px; margin-top: 25px;">
-                    <button type="submit" class="btn-primary"
+                    <button type="submit" id="add-movie-submit" class="btn-primary"
                         style="flex: 1; margin: 0; padding: 15px; font-weight: 700;">SAQLASH
                         VA CHOP ETISH</button>
                 </div>
