@@ -7,8 +7,11 @@ const sqlite3 = require('sqlite3').verbose();
 const app = express();
 const PORT = process.env.ADMIN_PORT || 3000;
 
-// Database connection (shared with bot)
-const dbPath = path.resolve(__dirname, '../../database.sqlite');
+// Database connection (shared with bot) — must resolve to the same file the
+// bot uses (see src/config/db.js): the Fly.io volume at /data when present.
+const fs = require('fs');
+const dbPath = process.env.DB_PATH
+    || (fs.existsSync('/data') ? path.join('/data', 'database.sqlite') : path.resolve(__dirname, '../../database.sqlite'));
 const db = new sqlite3.Database(dbPath);
 
 // Simple wrapper to make sqlite3 work like better-sqlite3

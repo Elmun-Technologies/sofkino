@@ -15,6 +15,30 @@ class Movie {
         return stmt.get(code);
     }
 
+    static findById(id) {
+        const stmt = db.prepare('SELECT * FROM movies WHERE id = ?');
+        return stmt.get(id);
+    }
+
+    // Picks one random movie, optionally excluding ids (e.g. already seen today)
+    // and premium-only titles (default excluded — used for the free daily pick).
+    static getRandom({ excludeIds = [], includePremium = false } = {}) {
+        const conditions = [];
+        const params = [];
+
+        if (!includePremium) {
+            conditions.push('is_premium_only = 0');
+        }
+        if (excludeIds.length > 0) {
+            conditions.push(`id NOT IN (${excludeIds.map(() => '?').join(',')})`);
+            params.push(...excludeIds);
+        }
+
+        const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+        const stmt = db.prepare(`SELECT * FROM movies ${where} ORDER BY RANDOM() LIMIT 1`);
+        return stmt.get(...params);
+    }
+
     static findByGenre(genreId) {
         const stmt = db.prepare('SELECT * FROM movies WHERE genre_id = ?');
         return stmt.all(genreId);
