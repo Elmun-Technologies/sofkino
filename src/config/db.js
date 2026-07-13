@@ -2,7 +2,15 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-const dbPath = process.env.DB_PATH || path.resolve(__dirname, '../../database.sqlite');
+// Persist the DB on the Fly.io volume (mounted at /data) so users/coins/streaks
+// survive redeploys. Locally (no /data) fall back to the repo path.
+// DB_PATH env var overrides everything (the Dockerfile sets it in production).
+const dbPath = process.env.DB_PATH
+    || (fs.existsSync('/data') ? path.join('/data', 'database.sqlite') : path.resolve(__dirname, '../../database.sqlite'));
+
+// Make sure the target directory exists before opening the DB.
+try { fs.mkdirSync(path.dirname(dbPath), { recursive: true }); } catch (e) { }
+
 const db = new Database(dbPath); // verbose: console.log
 
 // Initialize Database Schema
@@ -121,6 +129,28 @@ const initDb = () => {
             FOREIGN KEY (movie_id) REFERENCES movies(id)
         )
     `);
+
+    // How the view was unlocked: 'genre' (browse), 'code' (kod kiritish),
+    // 'random' (daily free random movie), 'paid' (bonus-unlock at a paywall)
+    try { db.exec("ALTER TABLE movie_views ADD COLUMN source TEXT DEFAULT 'code'"); } catch (e) { }
+
+    // Referrals: who invited whom, and whether the referrer has been rewarded
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS referrals (
+            invited_id INTEGER PRIMARY KEY,
+            referrer_id INTEGER,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            rewarded INTEGER DEFAULT 0,
+            FOREIGN KEY (invited_id) REFERENCES users(telegram_id),
+            FOREIGN KEY (referrer_id) REFERENCES users(telegram_id)
+        )
+    `);
+
+    // Gamification columns on users: daily streak + referral tracking + bonus unlocks
+    try { db.exec('ALTER TABLE users ADD COLUMN streak_count INTEGER DEFAULT 0'); } catch (e) { }
+    try { db.exec('ALTER TABLE users ADD COLUMN last_streak_date TEXT'); } catch (e) { }
+    try { db.exec('ALTER TABLE users ADD COLUMN referred_by INTEGER'); } catch (e) { }
+    try { db.exec('ALTER TABLE users ADD COLUMN bonus_unlocks INTEGER DEFAULT 0'); } catch (e) { }
 
     // News Posts (Broadcasting)
     db.exec(`

@@ -1,7 +1,7 @@
 const { Markup } = require('telegraf');
 
 const mainMenu = Markup.keyboard([
-    ['🔑 Kino kodini kiriting'],
+    ['🔑 Kino kodini kiriting', '🎲 Tasodifiy kino'],
     ['🎬 Kinolar', '⭐ Reyting'],
     ['💎 Premium', '📰 Yangiliklar'],
     ['👤 Profil', '📞 Yordam Markazi']

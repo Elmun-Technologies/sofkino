@@ -1,6 +1,7 @@
 const { Scenes, Markup } = require('telegraf');
 const { db } = require('../config/db');
 const News = require('../models/News');
+const { sendToUsers } = require('../utils/broadcast');
 
 const broadcastScene = new Scenes.WizardScene(
     'BROADCAST_SCENE',
@@ -86,27 +87,15 @@ const broadcastScene = new Scenes.WizardScene(
             keyboard.unshift([Markup.button.url('🔗 Batafsil', ctx.wizard.state.broadcast.url)]);
         }
 
-        let successCount = 0;
-        let failCount = 0;
-
         ctx.reply(`📤 Xabar yuborilmoqda... (Jami: ${users.length})`);
 
-        for (const user of users) {
-            try {
-                const options = { parse_mode: 'Markdown', ...Markup.inlineKeyboard(keyboard) };
-                if (ctx.wizard.state.broadcast.type === 'image') {
-                    await ctx.telegram.sendPhoto(user.telegram_id, ctx.wizard.state.broadcast.mediaId, { caption: ctx.wizard.state.broadcast.text, ...options });
-                } else if (ctx.wizard.state.broadcast.type === 'video') {
-                    await ctx.telegram.sendVideo(user.telegram_id, ctx.wizard.state.broadcast.mediaId, { caption: ctx.wizard.state.broadcast.text, ...options });
-                } else {
-                    await ctx.telegram.sendMessage(user.telegram_id, ctx.wizard.state.broadcast.text, options);
-                }
-                successCount++;
-                await new Promise(r => setTimeout(r, 50));
-            } catch (err) {
-                failCount++;
-            }
-        }
+        const options = { parse_mode: 'Markdown', ...Markup.inlineKeyboard(keyboard) };
+        const { successCount, failCount } = await sendToUsers(ctx.telegram, users, {
+            type: ctx.wizard.state.broadcast.type,
+            text: ctx.wizard.state.broadcast.text,
+            mediaId: ctx.wizard.state.broadcast.mediaId,
+            options
+        });
 
         ctx.reply(`✅ Xabar yuborish tugadi!\n\n✅ Muvaffaqiyatli: ${successCount}\n❌ Xatolik: ${failCount}`, require('../keyboards/adminMenu').adminMenu);
         return ctx.scene.leave();

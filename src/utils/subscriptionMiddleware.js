@@ -1,5 +1,6 @@
 const Channel = require('../models/Channel');
 const { Markup } = require('telegraf');
+const { rewardReferralIfPending } = require('./referralReward');
 
 const checkSubscription = async (ctx, next) => {
     // Skip if it's a callback query for 'check_sub' to avoid recursion
@@ -12,7 +13,7 @@ const checkSubscription = async (ctx, next) => {
         return next();
     }
 
-    // Skip for admins (optional, but usually helpful)
+    // Skip for admins
     const adminId = parseInt(process.env.ADMIN_ID);
     if (ctx.from && ctx.from.id === adminId) {
         return next();
@@ -20,6 +21,7 @@ const checkSubscription = async (ctx, next) => {
 
     const activeChannels = Channel.getAll(true);
     if (activeChannels.length === 0) {
+        await rewardReferralIfPending(ctx.telegram, ctx.from.id).catch(() => { });
         return next();
     }
 
@@ -51,6 +53,7 @@ const checkSubscription = async (ctx, next) => {
         }
     }
 
+    await rewardReferralIfPending(ctx.telegram, ctx.from.id).catch(() => { });
     return next();
 };
 

@@ -3,6 +3,58 @@ const Movie = require('../models/Movie');
 const Genre = require('../models/Genre');
 const User = require('../models/User');
 const { db } = require('../config/db');
+const { FREE_RANDOM_PER_DAY, FREE_CODES_PER_MONTH, TZ_OFFSET_SQL } = require('../config/gamification');
+
+function isPremiumUser(user) {
+    return !!(user && user.is_premium && new Date(user.premium_end) > new Date());
+}
+
+function randomViewedTodayIds(userId) {
+    const rows = db.prepare(`
+        SELECT movie_id FROM movie_views
+        WHERE user_id = ? AND source = 'random'
+        AND date(viewed_at, ?) = date('now', ?)
+    `).all(userId, TZ_OFFSET_SQL, TZ_OFFSET_SQL);
+    return rows.map(r => r.movie_id);
+}
+
+function codeUnlocksThisMonth(userId) {
+    return db.prepare(`
+        SELECT COUNT(*) as count FROM movie_views
+        WHERE user_id = ? AND source = 'code'
+        AND strftime('%Y-%m', viewed_at, ?) = strftime('%Y-%m', 'now', ?)
+    `).get(userId, TZ_OFFSET_SQL, TZ_OFFSET_SQL).count;
+}
+
+function logView(userId, movieId, source) {
+    Movie.incrementViews(movieId);
+    const randomSeconds = Math.floor(Math.random() * (300 - 60 + 1)) + 60;
+    Movie.addWatchTime(movieId, randomSeconds);
+    db.prepare('INSERT INTO movie_views (user_id, movie_id, source) VALUES (?, ?, ?)').run(userId, movieId, source);
+}
+
+function movieKeyboard(movie, { includeBack = true } = {}) {
+    const rows = [
+        [
+            Markup.button.callback(`👍 (${movie.likes_count})`, `movie_like_${movie.id}`),
+            Markup.button.callback(`👎 (${movie.dislikes_count})`, `movie_dislike_${movie.id}`)
+        ],
+        [Markup.button.callback(`📤 Do'stlarga ulashish (${movie.shares_count})`, `movie_share_${movie.id}`)]
+    ];
+    if (includeBack) {
+        rows.push([Markup.button.callback('⬅️ Orqaga', `genre_${movie.genre_id}`)]);
+    }
+    return Markup.inlineKeyboard(rows);
+}
+
+function paywallKeyboard(user, { bonusAction }) {
+    const rows = [[Markup.button.callback('💎 Premium olish', 'premium_plans')]];
+    if (user && user.bonus_unlocks > 0) {
+        rows.push([Markup.button.callback(`🎁 Bepul ochish (${user.bonus_unlocks} ta bor)`, bonusAction)]);
+    }
+    rows.push([Markup.button.callback('🎟 Do\'st taklif qilish', 'show_referral')]);
+    return Markup.inlineKeyboard(rows);
+}
 
 const movieController = {
     async showGenres(ctx) {
@@ -80,14 +132,14 @@ const movieController = {
 
     async showMovieDetails(ctx) {
         const movieId = parseInt(ctx.match[1]);
-        const movie = Movie.getAll().find(m => m.id === movieId);
+        const movie = Movie.findById(movieId);
 
         if (!movie) {
             return ctx.reply('❌ Kino topilmadi.');
         }
 
         const user = User.findById(ctx.from.id);
-        const isPremium = user && user.is_premium && new Date(user.premium_end) > new Date();
+        const isPremium = isPremiumUser(user);
 
         // Check if user has access
         if (movie.is_premium_only && !isPremium) {
@@ -101,32 +153,17 @@ const movieController = {
         }
 
         // Send movie
-        Movie.incrementViews(movieId);
-
-        // Track watch time (simulated for demo purposes, 1-5 minutes per view)
-        const randomSeconds = Math.floor(Math.random() * (300 - 60 + 1)) + 60;
-        Movie.addWatchTime(movieId, randomSeconds);
-
-        // Log view
-        const stmt = db.prepare('INSERT INTO movie_views (user_id, movie_id) VALUES (?, ?)');
-        stmt.run(ctx.from.id, movieId);
+        logView(ctx.from.id, movieId, 'genre');
 
         await ctx.deleteMessage();
 
-        const latestMovie = Movie.getAll().find(m => m.id === movieId);
+        const latestMovie = Movie.findById(movieId);
         const caption = `🎬 **${latestMovie.title}**\n\n${latestMovie.description}\n\n👁 Ko'rilgan: ${latestMovie.views_count} marta\n👍 ${latestMovie.likes_count} | 👎 ${latestMovie.dislikes_count} | 📤 ${latestMovie.shares_count}`;
 
         await ctx.replyWithVideo(movie.file_id, {
             caption: caption,
             parse_mode: 'Markdown',
-            ...Markup.inlineKeyboard([
-                [
-                    Markup.button.callback(`👍 (${movie.likes_count})`, `movie_like_${movie.id}`),
-                    Markup.button.callback(`👎 (${movie.dislikes_count})`, `movie_dislike_${movie.id}`)
-                ],
-                [Markup.button.callback(`📤 Do'stlarga ulashish (${movie.shares_count})`, `movie_share_${movie.id}`)],
-                [Markup.button.callback('⬅️ Orqaga', `genre_${movie.genre_id}`)]
-            ])
+            ...movieKeyboard(movie)
         });
     },
 
@@ -136,7 +173,7 @@ const movieController = {
 
         try {
             const { likes, dislikes } = Movie.toggleLike(movieId, ctx.from.id, isLike);
-            const movie = Movie.getAll().find(m => m.id === movieId);
+            const movie = Movie.findById(movieId);
 
             await ctx.editMessageCaption(`🎬 **${movie.title}**\n\n${movie.description}\n\n👁 Ko'rilgan: ${movie.views_count} marta\n👍 ${likes} | 👎 ${dislikes} | 📤 ${movie.shares_count}`, {
                 parse_mode: 'Markdown',
@@ -159,7 +196,7 @@ const movieController = {
 
     async handleShare(ctx) {
         const movieId = parseInt(ctx.match[1]);
-        const movie = Movie.getAll().find(m => m.id === movieId);
+        const movie = Movie.findById(movieId);
 
         if (!movie) return ctx.answerCbQuery('Kino topilmadi');
 
@@ -174,7 +211,7 @@ const movieController = {
 
         // Update the original message to reflect share count
         try {
-            const updatedMovie = Movie.getAll().find(m => m.id === movieId);
+            const updatedMovie = Movie.findById(movieId);
             await ctx.editMessageCaption(`🎬 **${updatedMovie.title}**\n\n${updatedMovie.description}\n\n👁 Ko'rilgan: ${updatedMovie.views_count} marta\n👍 ${updatedMovie.likes_count} | 👎 ${updatedMovie.dislikes_count} | 📤 ${updatedMovie.shares_count}`, {
                 parse_mode: 'Markdown',
                 ...Markup.inlineKeyboard([
@@ -191,7 +228,7 @@ const movieController = {
         }
     },
 
-    async unlockByCode(ctx, code) {
+    async unlockByCode(ctx, code, { viaBonus = false } = {}) {
         const movie = Movie.findByCode(code.trim());
 
         if (!movie) {
@@ -199,7 +236,7 @@ const movieController = {
         }
 
         const user = User.findById(ctx.from.id);
-        const isPremium = user && user.is_premium && new Date(user.premium_end) > new Date();
+        const isPremium = isPremiumUser(user);
 
         if (movie.is_premium_only && !isPremium) {
             return ctx.reply(`🔒 **${movie.title}**\n\nBu kino faqat Premium obunachilarga ochiq!\n💎 Premium obunani faollashtiring.`, {
@@ -210,24 +247,104 @@ const movieController = {
             });
         }
 
-        // Increment views
-        Movie.incrementViews(movie.id);
+        // Monthly free-code quota (premium users are unlimited)
+        if (!isPremium && !viaBonus) {
+            const usedThisMonth = codeUnlocksThisMonth(ctx.from.id);
+            if (usedThisMonth >= FREE_CODES_PER_MONTH) {
+                return ctx.reply(`🔒 Bu oy uchun ${FREE_CODES_PER_MONTH} ta bepul kod-kino limitingiz tugadi.`, {
+                    ...paywallKeyboard(user, { bonusAction: `use_bonus_code_${movie.access_code}` })
+                });
+            }
+        }
 
-        // Log view
-        const stmt = db.prepare('INSERT INTO movie_views (user_id, movie_id) VALUES (?, ?)');
-        stmt.run(ctx.from.id, movie.id);
+        logView(ctx.from.id, movie.id, viaBonus ? 'paid' : 'code');
+        const updatedMovie = Movie.findById(movie.id);
 
         await ctx.replyWithVideo(movie.file_id, {
-            caption: `🎬 **${movie.title}**\n\n${movie.description}\n\n✅ Kod orqali ochildi!\n👁 Ko'rilgan: ${movie.views_count + 1} marta\n👍 ${movie.likes_count} | 👎 ${movie.dislikes_count} | 📤 ${movie.shares_count}`,
+            caption: `🎬 **${updatedMovie.title}**\n\n${updatedMovie.description}\n\n✅ Kod orqali ochildi!\n👁 Ko'rilgan: ${updatedMovie.views_count} marta\n👍 ${updatedMovie.likes_count} | 👎 ${updatedMovie.dislikes_count} | 📤 ${updatedMovie.shares_count}`,
             parse_mode: 'Markdown',
-            ...Markup.inlineKeyboard([
-                [
-                    Markup.button.callback(`👍 (${movie.likes_count})`, `movie_like_${movie.id}`),
-                    Markup.button.callback(`👎 (${movie.dislikes_count})`, `movie_dislike_${movie.id}`)
-                ],
-                [Markup.button.callback(`📤 Do'stlarga ulashish (${movie.shares_count})`, `movie_share_${movie.id}`)]
-            ])
+            ...movieKeyboard(updatedMovie, { includeBack: false })
         });
+    },
+
+    // "🎲 Tasodifiy kino" — one free random (non-premium) movie per day.
+    async showRandomMovie(ctx) {
+        const seenTodayIds = randomViewedTodayIds(ctx.from.id);
+
+        if (seenTodayIds.length >= FREE_RANDOM_PER_DAY) {
+            const user = User.findById(ctx.from.id);
+            return ctx.reply('🎬 Bugungi tekin kinongiz tugadi! Ertaga yana bittasi kutmoqda.', {
+                ...paywallKeyboard(user, { bonusAction: 'use_bonus_random' })
+            });
+        }
+
+        const movie = Movie.getRandom({ excludeIds: seenTodayIds });
+        if (!movie) {
+            return ctx.reply('❌ Hozircha bazada kino yo\'q.');
+        }
+
+        logView(ctx.from.id, movie.id, 'random');
+        const latestMovie = Movie.findById(movie.id);
+
+        await ctx.replyWithVideo(movie.file_id, {
+            caption: `🎲 **${latestMovie.title}**\n\n${latestMovie.description}\n\n👁 Ko'rilgan: ${latestMovie.views_count} marta\n👍 ${latestMovie.likes_count} | 👎 ${latestMovie.dislikes_count} | 📤 ${latestMovie.shares_count}\n\n🎁 Bugungi tekin kinongiz! Ertaga yana bittasi.\nKo'proq ko'rish uchun → 💎 Premium yoki do'st taklif qiling.`,
+            parse_mode: 'Markdown',
+            ...movieKeyboard(movie, { includeBack: false })
+        });
+    },
+
+    // Spends one bonus_unlock earned from streaks/referrals to get another random movie.
+    // Checks a movie is actually available BEFORE spending, so a bonus is never
+    // wasted on a delivery that turns out to be impossible.
+    async useBonusForRandom(ctx) {
+        const user = User.findById(ctx.from.id);
+        if (!user || user.bonus_unlocks <= 0) {
+            return ctx.answerCbQuery('❌ Sizda bepul ochish qolmagan', { show_alert: true });
+        }
+
+        const seenTodayIds = randomViewedTodayIds(ctx.from.id);
+        const movie = Movie.getRandom({ excludeIds: seenTodayIds });
+        if (!movie) {
+            await ctx.answerCbQuery();
+            return ctx.reply('❌ Hozircha bazada kino yo\'q.');
+        }
+
+        const spent = User.useBonusUnlock(ctx.from.id);
+        if (!spent) {
+            return ctx.answerCbQuery('❌ Sizda bepul ochish qolmagan', { show_alert: true });
+        }
+        await ctx.answerCbQuery();
+
+        logView(ctx.from.id, movie.id, 'paid');
+        const latestMovie = Movie.findById(movie.id);
+
+        await ctx.replyWithVideo(movie.file_id, {
+            caption: `🎁 **${latestMovie.title}**\n\n${latestMovie.description}\n\n👁 Ko'rilgan: ${latestMovie.views_count} marta\n👍 ${latestMovie.likes_count} | 👎 ${latestMovie.dislikes_count} | 📤 ${latestMovie.shares_count}`,
+            parse_mode: 'Markdown',
+            ...movieKeyboard(movie, { includeBack: false })
+        });
+    },
+
+    // Spends one bonus_unlock to unlock a specific code-locked movie beyond the monthly quota.
+    // Confirms the movie still exists BEFORE spending the bonus.
+    async useBonusForCode(ctx, code) {
+        const user = User.findById(ctx.from.id);
+        if (!user || user.bonus_unlocks <= 0) {
+            return ctx.answerCbQuery('❌ Sizda bepul ochish qolmagan', { show_alert: true });
+        }
+
+        const movie = Movie.findByCode(code.trim());
+        if (!movie) {
+            await ctx.answerCbQuery();
+            return ctx.reply('❌ Bunday kodli kino topilmadi. Kodni qayta tekshiring.');
+        }
+
+        const spent = User.useBonusUnlock(ctx.from.id);
+        if (!spent) {
+            return ctx.answerCbQuery('❌ Sizda bepul ochish qolmagan', { show_alert: true });
+        }
+        await ctx.answerCbQuery();
+        return this.unlockByCode(ctx, code, { viaBonus: true });
     }
 };
 

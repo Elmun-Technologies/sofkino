@@ -75,6 +75,7 @@ const profileController = {
 
         const displayName = user.custom_name || user.full_name || 'Noma\'lum';
         const phoneDisplay = user.phone_number || 'Kiritilmagan';
+        const stats = User.getStats(user.telegram_id);
 
         const profile = `
 👤 **Profil**
@@ -86,6 +87,10 @@ const profileController = {
 💎 Premium: ${premiumStatus}
 👁 Ko'rgan kinolar: ${watchedCount.count} ta
 
+🔥 Kunlik seriya: ${stats.streak} kun
+🎁 Bepul ochishlar: ${stats.bonusUnlocks} ta
+🎟 Takliflar: ${stats.referralCount} ta
+
 🎭 **Qiziqishlar:** ${interestText}
 
 ${personalityText}
@@ -95,9 +100,30 @@ ${personalityText}
             parse_mode: 'Markdown',
             ...Markup.keyboard([
                 ['✏️ Profilni tahrirlash'],
+                ['🎟 Do\'st taklif qilish'],
                 ['⬅️ Orqaga']
             ]).resize()
         });
+    },
+
+    async showReferral(ctx) {
+        const stats = User.getStats(ctx.from.id) || { referralCount: 0, bonusUnlocks: 0 };
+        const link = `https://t.me/${ctx.botInfo.username}?start=ref_${ctx.from.id}`;
+
+        const message = `
+🎟 **Do'stlaringizni taklif qiling!**
+
+Har bir do'stingiz botga qo'shilib, kanallarga a'zo bo'lsa — sizga 1 ta bepul kino ochish beriladi.
+
+🔗 Sizning havolangiz:
+${link}
+
+🎁 Bepul ochishlar: ${stats.bonusUnlocks} ta
+👥 Taklif qilinganlar: ${stats.referralCount} ta
+        `.trim();
+
+        if (ctx.callbackQuery) await ctx.answerCbQuery();
+        await ctx.reply(message, { parse_mode: 'Markdown' });
     }
 };
 
