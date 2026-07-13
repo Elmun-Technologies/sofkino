@@ -9,6 +9,12 @@ function isPremiumUser(user) {
     return !!(user && user.is_premium && new Date(user.premium_end) > new Date());
 }
 
+// A missing description must never render as the literal string "null" -
+// `${movie.description}` does exactly that when the DB value is JS null.
+function descriptionBlock(movie) {
+    return movie.description ? `\n\n${movie.description}` : '';
+}
+
 function randomViewedTodayIds(userId) {
     const rows = db.prepare(`
         SELECT movie_id FROM movie_views
@@ -143,7 +149,7 @@ const movieController = {
 
         // Check if user has access
         if (movie.is_premium_only && !isPremium) {
-            return ctx.editMessageText(`🔒 **${movie.title}**\n\n${movie.description}\n\n❌ Bu kino faqat Premium obunachilarga ochiq!\n💎 Premium obunani faollashtiring.`, {
+            return ctx.editMessageText(`🔒 **${movie.title}**${descriptionBlock(movie)}\n\n❌ Bu kino faqat Premium obunachilarga ochiq!\n💎 Premium obunani faollashtiring.`, {
                 parse_mode: 'Markdown',
                 ...Markup.inlineKeyboard([
                     [Markup.button.callback('💎 Premium olish', 'premium_plans')],
@@ -158,7 +164,7 @@ const movieController = {
         await ctx.deleteMessage();
 
         const latestMovie = Movie.findById(movieId);
-        const caption = `🎬 **${latestMovie.title}**\n\n${latestMovie.description}\n\n👁 Ko'rilgan: ${latestMovie.views_count} marta\n👍 ${latestMovie.likes_count} | 👎 ${latestMovie.dislikes_count} | 📤 ${latestMovie.shares_count}`;
+        const caption = `🎬 **${latestMovie.title}**${descriptionBlock(latestMovie)}\n\n👁 Ko'rilgan: ${latestMovie.views_count} marta\n👍 ${latestMovie.likes_count} | 👎 ${latestMovie.dislikes_count} | 📤 ${latestMovie.shares_count}`;
 
         await ctx.replyWithVideo(movie.file_id, {
             caption: caption,
@@ -175,7 +181,7 @@ const movieController = {
             const { likes, dislikes } = Movie.toggleLike(movieId, ctx.from.id, isLike);
             const movie = Movie.findById(movieId);
 
-            await ctx.editMessageCaption(`🎬 **${movie.title}**\n\n${movie.description}\n\n👁 Ko'rilgan: ${movie.views_count} marta\n👍 ${likes} | 👎 ${dislikes} | 📤 ${movie.shares_count}`, {
+            await ctx.editMessageCaption(`🎬 **${movie.title}**${descriptionBlock(movie)}\n\n👁 Ko'rilgan: ${movie.views_count} marta\n👍 ${likes} | 👎 ${dislikes} | 📤 ${movie.shares_count}`, {
                 parse_mode: 'Markdown',
                 ...Markup.inlineKeyboard([
                     [
@@ -212,7 +218,7 @@ const movieController = {
         // Update the original message to reflect share count
         try {
             const updatedMovie = Movie.findById(movieId);
-            await ctx.editMessageCaption(`🎬 **${updatedMovie.title}**\n\n${updatedMovie.description}\n\n👁 Ko'rilgan: ${updatedMovie.views_count} marta\n👍 ${updatedMovie.likes_count} | 👎 ${updatedMovie.dislikes_count} | 📤 ${updatedMovie.shares_count}`, {
+            await ctx.editMessageCaption(`🎬 **${updatedMovie.title}**${descriptionBlock(updatedMovie)}\n\n👁 Ko'rilgan: ${updatedMovie.views_count} marta\n👍 ${updatedMovie.likes_count} | 👎 ${updatedMovie.dislikes_count} | 📤 ${updatedMovie.shares_count}`, {
                 parse_mode: 'Markdown',
                 ...Markup.inlineKeyboard([
                     [
@@ -261,7 +267,7 @@ const movieController = {
         const updatedMovie = Movie.findById(movie.id);
 
         await ctx.replyWithVideo(movie.file_id, {
-            caption: `🎬 **${updatedMovie.title}**\n\n${updatedMovie.description}\n\n✅ Kod orqali ochildi!\n👁 Ko'rilgan: ${updatedMovie.views_count} marta\n👍 ${updatedMovie.likes_count} | 👎 ${updatedMovie.dislikes_count} | 📤 ${updatedMovie.shares_count}`,
+            caption: `🎬 **${updatedMovie.title}**${descriptionBlock(updatedMovie)}\n\n✅ Kod orqali ochildi!\n👁 Ko'rilgan: ${updatedMovie.views_count} marta\n👍 ${updatedMovie.likes_count} | 👎 ${updatedMovie.dislikes_count} | 📤 ${updatedMovie.shares_count}`,
             parse_mode: 'Markdown',
             ...movieKeyboard(updatedMovie, { includeBack: false })
         });
@@ -287,7 +293,7 @@ const movieController = {
         const latestMovie = Movie.findById(movie.id);
 
         await ctx.replyWithVideo(movie.file_id, {
-            caption: `🎲 **${latestMovie.title}**\n\n${latestMovie.description}\n\n👁 Ko'rilgan: ${latestMovie.views_count} marta\n👍 ${latestMovie.likes_count} | 👎 ${latestMovie.dislikes_count} | 📤 ${latestMovie.shares_count}\n\n🎁 Bugungi tekin kinongiz! Ertaga yana bittasi.\nKo'proq ko'rish uchun → 💎 Premium yoki do'st taklif qiling.`,
+            caption: `🎲 **${latestMovie.title}**${descriptionBlock(latestMovie)}\n\n👁 Ko'rilgan: ${latestMovie.views_count} marta\n👍 ${latestMovie.likes_count} | 👎 ${latestMovie.dislikes_count} | 📤 ${latestMovie.shares_count}\n\n🎁 Bugungi tekin kinongiz! Ertaga yana bittasi.\nKo'proq ko'rish uchun → 💎 Premium yoki do'st taklif qiling.`,
             parse_mode: 'Markdown',
             ...movieKeyboard(movie, { includeBack: false })
         });
@@ -319,7 +325,7 @@ const movieController = {
         const latestMovie = Movie.findById(movie.id);
 
         await ctx.replyWithVideo(movie.file_id, {
-            caption: `🎁 **${latestMovie.title}**\n\n${latestMovie.description}\n\n👁 Ko'rilgan: ${latestMovie.views_count} marta\n👍 ${latestMovie.likes_count} | 👎 ${latestMovie.dislikes_count} | 📤 ${latestMovie.shares_count}`,
+            caption: `🎁 **${latestMovie.title}**${descriptionBlock(latestMovie)}\n\n👁 Ko'rilgan: ${latestMovie.views_count} marta\n👍 ${latestMovie.likes_count} | 👎 ${latestMovie.dislikes_count} | 📤 ${latestMovie.shares_count}`,
             parse_mode: 'Markdown',
             ...movieKeyboard(movie, { includeBack: false })
         });

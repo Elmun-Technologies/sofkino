@@ -324,8 +324,16 @@ bot.action(/^payment_confirm_(.+)$/, (ctx) => {
 bot.action(/^pay_approve_(\d+)$/, isAdmin, (ctx) => premiumController.approvePayment(ctx, parseInt(ctx.match[1])));
 bot.action(/^pay_reject_(\d+)$/, isAdmin, (ctx) => premiumController.rejectPayment(ctx, parseInt(ctx.match[1])));
 
-// Handle the payment screenshot the user sends after transferring
+// Handle the payment screenshot the user sends after transferring - accepted
+// either as a compressed photo or as an image sent uncompressed (a "document").
 bot.on('photo', (ctx, next) => {
+    if (premiumController.isAwaitingScreenshot(ctx.from.id)) {
+        return premiumController.handleScreenshot(ctx);
+    }
+    return next();
+});
+
+bot.on('document', (ctx, next) => {
     if (premiumController.isAwaitingScreenshot(ctx.from.id)) {
         return premiumController.handleScreenshot(ctx);
     }
@@ -345,6 +353,9 @@ bot.on('text', (ctx, next) => {
     if (waitingForCode[ctx.from.id]) {
         delete waitingForCode[ctx.from.id];
         return movieController.unlockByCode(ctx, ctx.message.text);
+    }
+    if (premiumController.isAwaitingScreenshot(ctx.from.id)) {
+        return ctx.reply('📸 Iltimos, chek skrinshotini rasm (yoki fayl) sifatida yuboring, matn emas.');
     }
     return next();
 });

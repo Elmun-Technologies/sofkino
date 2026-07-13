@@ -90,7 +90,7 @@ class Movie {
             INSERT INTO movies (title, description, genre_id, file_id, source_channel_id, source_message_id, source_caption, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
         `);
-        const result = stmt.run(title || '⏳ Kutilmoqda', description, genreId, fileId, String(sourceChannelId), sourceMessageId, caption || null);
+        const result = stmt.run(title || '🎬 Nomsiz kino', description, genreId, fileId, String(sourceChannelId), sourceMessageId, caption || null);
 
         return { ...result, title: title || null, genreId };
     }

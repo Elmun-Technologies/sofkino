@@ -183,7 +183,7 @@ async function loadPendingMovies() {
         }
 
         listEl.innerHTML = pending.map(p => {
-            const hasTitle = p.title && p.title !== '⏳ Kutilmoqda';
+            const hasTitle = p.title && p.title !== '🎬 Nomsiz kino';
             return `
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #0f1429; border: 1px solid #1e2542; border-radius: 10px; margin-bottom: 10px;">
                 <div>

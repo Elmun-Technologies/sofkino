@@ -125,8 +125,10 @@ ${cardText}
         return !!waitingForScreenshot[userId];
     },
 
-    // Step 2: the screenshot photo arrives — log the pending payment and forward
-    // the actual screenshot to the admin so they can verify it before approving.
+    // Step 2: the screenshot arrives — as a compressed photo or as an image
+    // sent uncompressed (a "document" in Telegram terms). Either way, log the
+    // pending payment and forward the actual file to the admin so they can
+    // verify it before approving.
     async handleScreenshot(ctx) {
         const plan = waitingForScreenshot[ctx.from.id];
         delete waitingForScreenshot[ctx.from.id];
@@ -135,8 +137,10 @@ ${cardText}
         if (!selectedPlan) return;
 
         try {
-            const photos = ctx.message.photo;
-            const fileId = photos[photos.length - 1].file_id;
+            const isDocument = !!ctx.message.document;
+            const fileId = isDocument
+                ? ctx.message.document.file_id
+                : ctx.message.photo[ctx.message.photo.length - 1].file_id;
 
             const transactionId = `manual_${ctx.from.id}_${Date.now()}`;
             const result = db.prepare(`
@@ -147,17 +151,19 @@ ${cardText}
             await ctx.reply('✅ Chek qabul qilindi!\n\n⏳ Admin tekshirib, tez orada Premiumni faollashtiradi.');
 
             const paymentId = result.lastInsertRowid;
+            const caption = `💳 <b>Yangi to'lov so'rovi</b>\n\n👤 @${escapeHtml(ctx.from.username || 'yo\'q')} (ID: ${ctx.from.id})\n📦 Tarif: ${selectedPlan.label}\n💰 Narx: ${selectedPlan.price.toLocaleString('ru-RU')} so'm`;
+            const buttons = Markup.inlineKeyboard([
+                [
+                    Markup.button.callback('✅ Tasdiqlash', `pay_approve_${paymentId}`),
+                    Markup.button.callback('❌ Rad etish', `pay_reject_${paymentId}`)
+                ]
+            ]);
+
             for (const adminId of getAdminIds()) {
-                await ctx.telegram.sendPhoto(adminId, fileId, {
-                    caption: `💳 <b>Yangi to'lov so'rovi</b>\n\n👤 @${escapeHtml(ctx.from.username || 'yo\'q')} (ID: ${ctx.from.id})\n📦 Tarif: ${selectedPlan.label}\n💰 Narx: ${selectedPlan.price.toLocaleString('ru-RU')} so'm`,
-                    parse_mode: 'HTML',
-                    ...Markup.inlineKeyboard([
-                        [
-                            Markup.button.callback('✅ Tasdiqlash', `pay_approve_${paymentId}`),
-                            Markup.button.callback('❌ Rad etish', `pay_reject_${paymentId}`)
-                        ]
-                    ])
-                }).catch(err => console.error(`Failed to notify admin ${adminId} of payment:`, err.message));
+                const send = isDocument
+                    ? ctx.telegram.sendDocument(adminId, fileId, { caption, parse_mode: 'HTML', ...buttons })
+                    : ctx.telegram.sendPhoto(adminId, fileId, { caption, parse_mode: 'HTML', ...buttons });
+                await send.catch(err => console.error(`Failed to notify admin ${adminId} of payment:`, err.message));
             }
         } catch (err) {
             console.error('handleScreenshot error:', err);
