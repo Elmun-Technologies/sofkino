@@ -4,9 +4,9 @@ const authMiddleware = require('../middleware/auth');
 const { db } = require('../server');
 
 // Get all users with filters
-router.get('/', authMiddleware, (req, res) => {
+router.get('/', authMiddleware, async (req, res) => {
     try {
-        const { search, gender, country, minAge, maxAge } = req.query;
+        const { search, country, region, minAge, maxAge } = req.query;
 
         let query = 'SELECT * FROM users WHERE 1=1';
         const params = [];
@@ -16,14 +16,16 @@ router.get('/', authMiddleware, (req, res) => {
             params.push(`%${search}%`, `%${search}%`);
         }
 
-        if (gender) {
-            query += ' AND gender = ?';
-            params.push(gender);
-        }
-
         if (country) {
             query += ' AND country = ?';
             params.push(country);
+        }
+
+        // "city" doubles as the user's region/viloyat (picked from a fixed list
+        // in the profile edit scene)
+        if (region) {
+            query += ' AND city = ?';
+            params.push(region);
         }
 
         if (minAge) {
@@ -38,18 +40,19 @@ router.get('/', authMiddleware, (req, res) => {
 
         query += ' ORDER BY joined_at DESC LIMIT 100';
 
-        const users = db.prepare(query).all(...params);
+        const users = await db.prepare(query).all(params);
         res.json(users);
     } catch (err) {
+        console.error('Fetch users error:', err);
         res.status(500).json({ error: err.message });
     }
 });
 
 // Ban user
-router.post('/:id/ban', authMiddleware, (req, res) => {
+router.post('/:id/ban', authMiddleware, async (req, res) => {
     try {
         const { id } = req.params;
-        db.prepare('UPDATE users SET is_banned = 1 WHERE telegram_id = ?').run(id);
+        await db.prepare('UPDATE users SET is_banned = 1 WHERE telegram_id = ?').run([id]);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -57,10 +60,10 @@ router.post('/:id/ban', authMiddleware, (req, res) => {
 });
 
 // Unban user
-router.post('/:id/unban', authMiddleware, (req, res) => {
+router.post('/:id/unban', authMiddleware, async (req, res) => {
     try {
         const { id } = req.params;
-        db.prepare('UPDATE users SET is_banned = 0 WHERE telegram_id = ?').run(id);
+        await db.prepare('UPDATE users SET is_banned = 0 WHERE telegram_id = ?').run([id]);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -68,10 +71,10 @@ router.post('/:id/unban', authMiddleware, (req, res) => {
 });
 
 // Delete user
-router.delete('/:id', authMiddleware, (req, res) => {
+router.delete('/:id', authMiddleware, async (req, res) => {
     try {
         const { id } = req.params;
-        db.prepare('DELETE FROM users WHERE telegram_id = ?').run(id);
+        await db.prepare('DELETE FROM users WHERE telegram_id = ?').run([id]);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });

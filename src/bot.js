@@ -65,6 +65,9 @@ bot.use(async (ctx, next) => {
             `).run(ctx.from.id, ctx.from.username || null, ctx.from.first_name);
         } else {
             User.createOrUpdate(ctx.from.id, ctx.from.username, ctx.from.first_name);
+            if (user.is_banned) {
+                return ctx.reply('🚫 Siz botdan foydalanish huquqidan mahrum qilingansiz.').catch(() => { });
+            }
         }
 
         // Daily login streak (awarded at most once per local day)

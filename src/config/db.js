@@ -37,6 +37,11 @@ const initDb = () => {
         )
     `);
 
+    // "city" doubles as the user's viloyat/hudud, picked from a fixed list in
+    // the profile edit scene (not free text) so it's filterable in the admin
+    // panel. is_banned backs the admin panel's ban/unban action.
+    try { db.exec('ALTER TABLE users ADD COLUMN is_banned INTEGER DEFAULT 0'); } catch (e) { }
+
     // Genres table
     db.exec(`
         CREATE TABLE IF NOT EXISTS genres (

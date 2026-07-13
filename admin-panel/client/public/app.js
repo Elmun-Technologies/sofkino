@@ -989,6 +989,7 @@ async function loadUsers(filters = {}) {
                         <th>TELEGRAM ID</th>
                         <th>ISM</th>
                         <th>USERNAME</th>
+                        <th>HUDUD</th>
                         <th>QO'SHILGAN</th>
                         <th>PREMIUM</th>
                         <th>AMALLAR</th>
@@ -998,12 +999,16 @@ async function loadUsers(filters = {}) {
                     ${users.map(u => `
                         <tr>
                             <td><code>${u.telegram_id}</code></td>
-                            <td><strong>${u.full_name || 'N/A'}</strong></td>
+                            <td><strong>${u.full_name || 'N/A'}</strong>${u.is_banned ? ' <span style="color: #ef4444; font-size: 11px;">(BAN)</span>' : ''}</td>
                             <td>@${u.username || 'N/A'}</td>
+                            <td>${u.city || '-'}</td>
                             <td>${new Date(u.joined_at).toLocaleDateString()}</td>
                             <td>${u.is_premium ? '<span style="color: #10b981;">✅ Premium</span>' : '<span style="color: #8b92b0;">❌</span>'}</td>
                             <td>
-                                <button style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer;">Ban</button>
+                                ${u.is_banned
+                            ? `<button onclick="unbanUser(${u.telegram_id})" style="background: rgba(16, 185, 129, 0.1); color: #10b981; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer;">Unban</button>`
+                            : `<button onclick="banUser(${u.telegram_id})" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer;">Ban</button>`
+                        }
                             </td>
                         </tr>
                     `).join('')}
@@ -1014,6 +1019,31 @@ async function loadUsers(filters = {}) {
         document.getElementById('users-list').innerHTML = html;
     } catch (err) {
         console.error(err);
+    }
+}
+
+async function banUser(id) {
+    if (!confirm('Bu foydalanuvchini ban qilishga ishonchingiz komilmi?')) return;
+    try {
+        await fetch(`${API_URL}/users/${id}/ban`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        loadUsers();
+    } catch (err) {
+        alert('Xatolik yuz berdi: ' + err.message);
+    }
+}
+
+async function unbanUser(id) {
+    try {
+        await fetch(`${API_URL}/users/${id}/unban`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        loadUsers();
+    } catch (err) {
+        alert('Xatolik yuz berdi: ' + err.message);
     }
 }
 

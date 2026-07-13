@@ -82,6 +82,7 @@ const profileController = {
 
 📛 Ism: ${displayName}
 📞 Telefon: ${phoneDisplay}
+📍 Hudud: ${user.city || 'Kiritilmagan'}
 🆔 Username: @${user.username || 'yo\'q'}
 📆 Botda: ${daysInBot} kun
 💎 Premium: ${premiumStatus}
