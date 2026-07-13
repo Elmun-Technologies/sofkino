@@ -55,7 +55,7 @@ router.get('/', authMiddleware, async (req, res) => {
                 COUNT(CASE WHEN julianday(premium_end) - julianday(premium_start) <= 30 THEN 1 END) as monthly,
                 COUNT(CASE WHEN julianday(premium_end) - julianday(premium_start) > 30 AND julianday(premium_end) - julianday(premium_start) <= 90 THEN 1 END) as quarterly,
                 COUNT(CASE WHEN julianday(premium_end) - julianday(premium_start) > 90 AND julianday(premium_end) - julianday(premium_start) <= 180 THEN 1 END) as semi_annual,
-                COUNT(CASE WHEN julianday(premium_end) - julianday(premium_start) > 365 THEN 1 END) as lifetime
+                COUNT(CASE WHEN julianday(premium_end) - julianday(premium_start) > 180 THEN 1 END) as lifetime
             FROM users u
             ${whereClause.replace('WHERE 1=1 AND', 'WHERE')} AND is_premium = 1 AND premium_end > datetime('now')
         `).get(params);
@@ -77,6 +77,19 @@ router.get('/', authMiddleware, async (req, res) => {
 
         const movieStats = await db.prepare('SELECT COUNT(*) as total FROM movies').get();
 
+        // Active promocodes: not expired and not over their usage limit
+        const activePromosRow = await db.prepare(`
+            SELECT COUNT(*) as count FROM promocodes p
+            WHERE (p.expires_at IS NULL OR p.expires_at > datetime('now'))
+            AND (p.usage_limit IS NULL OR (SELECT COUNT(*) FROM promocode_usages pu WHERE pu.promocode_id = p.id) < p.usage_limit)
+        `).get([]);
+
+        // Revenue from payments approved today
+        const todayRevenueRow = await db.prepare(`
+            SELECT COALESCE(SUM(amount), 0) as total FROM payments
+            WHERE status = 'approved' AND date(created_at) = date('now')
+        `).get([]);
+
         // Top 10 movies for the dashboard
         const topMovies = await db.prepare(`
             SELECT m.id, m.title, m.views_count, m.likes_count, m.shares_count, g.name as genre_name
@@ -97,7 +110,9 @@ router.get('/', authMiddleware, async (req, res) => {
                 topMovies
             },
             users: userStats,
-            movies: movieStats
+            movies: movieStats,
+            activePromos: activePromosRow.count,
+            todayRevenue: todayRevenueRow.total
         });
     } catch (err) {
         console.error('Analytics error:', err);

@@ -157,6 +157,7 @@ async function loadGenreOptions(selectedGenreId) {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const genres = await res.json();
+        if (!Array.isArray(genres)) return;
         const select = document.getElementById('movie-genre-select');
         select.innerHTML = genres.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
         if (selectedGenreId) select.value = selectedGenreId;
@@ -338,15 +339,18 @@ async function loadAnalytics() {
         const interest = document.getElementById('filter-interest').value;
 
         let url = `${API_URL}/analytics?`;
-        if (country) url += `country=${country}&`;
-        if (infoAgeMin) url += `age_min=${infoAgeMin}&`;
-        if (infoAgeMax) url += `age_max=${infoAgeMax}&`;
-        if (interest) url += `interest=${interest}&`;
+        if (country) url += `country=${encodeURIComponent(country)}&`;
+        if (infoAgeMin) url += `age_min=${encodeURIComponent(infoAgeMin)}&`;
+        if (infoAgeMax) url += `age_max=${encodeURIComponent(infoAgeMax)}&`;
+        if (interest) url += `interest=${encodeURIComponent(interest)}&`;
 
         const res = await fetch(url, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await res.json();
+        if (!data || data.error) {
+            throw new Error(data?.error || `Server javobi noto'g'ri (status ${res.status})`);
+        }
 
         // Update Total Stats
         document.getElementById('total-revenue').textContent = formatNumber(data.premium?.revenue?.monthly + data.premium?.revenue?.quarterly + data.premium?.revenue?.semi_annual + data.premium?.revenue?.lifetime || 0) + " SO'M";
@@ -354,6 +358,8 @@ async function loadAnalytics() {
         document.getElementById('new-users').textContent = formatNumber(data.users?.total || 0);
         document.getElementById('active-promos').textContent = data.activePromos || 0;
         document.getElementById('today-revenue').textContent = formatNumber(data.todayRevenue || 0) + " SO'M";
+
+        renderDashboardAlerts(data);
 
         // Top Genres Chart
         const genres = data.views?.byGenre || [];
@@ -402,6 +408,44 @@ async function loadAnalytics() {
     }
 }
 
+// Real, data-driven dashboard summary (replaces the old hardcoded demo alerts)
+function renderDashboardAlerts(data) {
+    const el = document.getElementById('alerts-list');
+    if (!el) return;
+
+    const total = data.users?.total || 0;
+    const premium = data.users?.premium || 0;
+    const totalViews = data.views?.total || 0;
+    const topGenre = (data.views?.byGenre || [])[0];
+    const movies = data.movies?.total || 0;
+
+    const items = [];
+
+    if (total === 0) {
+        items.push({ cls: 'info', icon: 'ℹ️', html: 'Hali foydalanuvchilar yo\'q. Botni ulashishni boshlang.' });
+    } else {
+        const premiumPct = total > 0 ? Math.round((premium / total) * 100) : 0;
+        items.push({ cls: 'success', icon: '👥', html: `<strong>${formatNumber(total)}</strong> foydalanuvchi, shundan <strong>${formatNumber(premium)}</strong> ta Premium (${premiumPct}%).` });
+    }
+
+    if (movies === 0) {
+        items.push({ cls: 'warning', icon: '🎬', html: 'Bazada nashr qilingan kino yo\'q. Saqlash kanaliga video yuboring.' });
+    }
+
+    if (topGenre) {
+        items.push({ cls: 'info', icon: '🔥', html: `Eng ko'p ko'rilgan janr: <strong>${topGenre.name}</strong> (${formatNumber(topGenre.views)} ko'rish).` });
+    }
+
+    items.push({ cls: 'info', icon: '👁', html: `Umumiy ko'rishlar soni: <strong>${formatNumber(totalViews)}</strong>.` });
+
+    el.innerHTML = items.map(a => `
+        <div class="alert ${a.cls}">
+            <div class="alert-icon">${a.icon}</div>
+            <div class="alert-content">${a.html}</div>
+        </div>
+    `).join('');
+}
+
 // Bind Skvoznaya Filters
 document.getElementById('apply-skvoznaya-filters').addEventListener('click', loadAnalytics);
 
@@ -432,10 +476,10 @@ async function loadPremium() {
             document.getElementById('details-modal').style.display = 'none';
         }
 
+        // Click on the dark backdrop of ANY modal closes it (not just details)
         window.onclick = (event) => {
-            const modal = document.getElementById('details-modal');
-            if (event.target == modal) {
-                modal.style.display = 'none';
+            if (event.target.classList && event.target.classList.contains('modal')) {
+                event.target.style.display = 'none';
             }
         }
 
@@ -804,9 +848,9 @@ async function loadMovies() {
         const interest = document.getElementById('movie-filter-interest') ? document.getElementById('movie-filter-interest').value : '';
 
         let url = `${API_URL}/movies?`;
-        if (country) url += `country=${country}&`;
-        if (age) url += `age=${age}&`;
-        if (interest) url += `interest=${interest}&`;
+        if (country) url += `country=${encodeURIComponent(country)}&`;
+        if (age) url += `age=${encodeURIComponent(age)}&`;
+        if (interest) url += `interest=${encodeURIComponent(interest)}&`;
         if (search) url += `search=${encodeURIComponent(search)}&`;
 
         const res = await fetch(url, {
@@ -956,7 +1000,13 @@ async function showMovieAnalytics(id) {
         });
         const data = await res.json();
 
-        document.getElementById('movie-analytics-title').textContent = data.title.toUpperCase() + ' - ANALITIKA';
+        if (!data || data.error || !data.analytics) {
+            document.getElementById('movie-analytics-title').textContent = 'ANALITIKA';
+            document.getElementById('movie-countries-list').innerHTML = `<p style="color: #ef4444; font-size: 13px;">Xatolik: ${data?.error || 'Ma\'lumot topilmadi'}</p>`;
+            return;
+        }
+
+        document.getElementById('movie-analytics-title').textContent = (data.title || 'KINO').toUpperCase() + ' - ANALITIKA';
         document.getElementById('movie-detail-views').textContent = formatNumber(data.views_count);
         document.getElementById('movie-detail-likes').textContent = `${data.likes_count || 0} / ${data.dislikes_count || 0}`;
         document.getElementById('movie-detail-shares').textContent = formatNumber(data.shares_count || 0);
@@ -1026,6 +1076,15 @@ async function loadUsers(filters = {}) {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const users = await res.json();
+
+        if (!Array.isArray(users)) {
+            document.getElementById('users-list').innerHTML = `
+                <div style="background: #141a2e; border: 1px solid #1e2542; padding: 40px; border-radius: 16px; text-align: center;">
+                    <p style="color: #ef4444;">Xatolik: ${users?.error || 'Server javobi noto\'g\'ri. Qayta login qiling.'}</p>
+                </div>
+            `;
+            return;
+        }
 
         if (users.length === 0) {
             document.getElementById('users-list').innerHTML = `
@@ -1109,6 +1168,15 @@ async function loadGenres() {
         });
         const genres = await res.json();
 
+        if (!Array.isArray(genres)) {
+            document.getElementById('genres-list').innerHTML = `
+                <div style="background: #141a2e; border: 1px solid #1e2542; padding: 40px; border-radius: 16px; text-align: center;">
+                    <p style="color: #ef4444;">Xatolik: ${genres?.error || 'Server javobi noto\'g\'ri'}</p>
+                </div>
+            `;
+            return;
+        }
+
         if (genres.length === 0) {
             document.getElementById('genres-list').innerHTML = `
                 <div style="background: #141a2e; border: 1px solid #1e2542; padding: 40px; border-radius: 16px; text-align: center;">
@@ -1133,7 +1201,7 @@ async function loadGenres() {
                         <span style="display: block; color: #8b92b0; font-size: 10px; text-transform: uppercase;">KO'RISHLAR</span>
                         <span style="color: #10b981; font-weight: 700;">${formatNumber(g.views_count || 0)} 👁</span>
                     </div>
-                    <button onclick="viewTopMovies(${g.id}, '${g.name}')" style="background: rgba(59, 130, 246, 0.1); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.2); padding: 8px 12px; border-radius: 6px; cursor: pointer; margin-left: 10px;">Top 10</button>
+                    <button onclick="viewTopMovies(${g.id}, '${(g.name || '').replace(/'/g, "\\'")}')" style="background: rgba(59, 130, 246, 0.1); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.2); padding: 8px 12px; border-radius: 6px; cursor: pointer; margin-left: 10px;">Top 10</button>
                     <button onclick="deleteGenre(${g.id})" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); padding: 8px 12px; border-radius: 6px; cursor: pointer; margin-left: 10px;">🗑</button>
                 </div>
             </div>
@@ -1210,11 +1278,18 @@ async function viewTopMovies(genreId, genreName) {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const movies = await res.json();
+        const listEl = document.getElementById('genre-top-movies-list');
 
         document.getElementById('top-movies-title').textContent = `🎬 ${genreName} - TOP 10 KINOLAR`;
+        document.getElementById('top-movies-modal').style.display = 'block';
+
+        if (!Array.isArray(movies)) {
+            listEl.innerHTML = `<p style="color: #ef4444;">Xatolik: ${movies?.error || 'Server javobi noto\'g\'ri'}</p>`;
+            return;
+        }
 
         if (movies.length === 0) {
-            document.getElementById('top-movies-list').innerHTML = '<p style="color: #8b92b0;">Bu janrda hali kinolar yo\'q.</p>';
+            listEl.innerHTML = '<p style="color: #8b92b0;">Bu janrda hali kinolar yo\'q.</p>';
         } else {
             const html = movies.map((m, i) => `
                 <div style="padding: 15px; background: #0f1429; border: 1px solid #1e2542; margin: 10px 0; border-radius: 8px;">
@@ -1230,10 +1305,8 @@ async function viewTopMovies(genreId, genreName) {
                     </div>
                 </div>
             `).join('');
-            document.getElementById('top-movies-list').innerHTML = html;
+            listEl.innerHTML = html;
         }
-
-        document.getElementById('top-movies-modal').style.display = 'block';
     } catch (err) {
         console.error('Error loading top movies:', err);
     }
@@ -1245,6 +1318,15 @@ async function loadPromocodes() {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const promocodes = await res.json();
+
+        if (!Array.isArray(promocodes)) {
+            document.getElementById('promocodes-list').innerHTML = `
+                <div style="background: #141a2e; border: 1px solid #1e2542; padding: 40px; border-radius: 16px; text-align: center;">
+                    <p style="color: #ef4444;">Xatolik: ${promocodes?.error || 'Server javobi noto\'g\'ri'}</p>
+                </div>
+            `;
+            return;
+        }
 
         if (promocodes.length === 0) {
             document.getElementById('promocodes-list').innerHTML = `
@@ -1335,20 +1417,27 @@ async function viewPromocodeAnalytics(id) {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const usages = await res.json();
+        const contentEl = document.getElementById('promocode-analytics-content');
+
+        if (!Array.isArray(usages)) {
+            document.getElementById('promocode-analytics-title').textContent = '📊 Promokod Analitikasi';
+            contentEl.innerHTML = `<p style="color: #ef4444;">Xatolik: ${usages?.error || 'Server javobi noto\'g\'ri'}</p>`;
+            return;
+        }
 
         document.getElementById('promocode-analytics-title').textContent = `📊 Promokod Analitikasi (${usages.length} foydalanuvchi)`;
 
         if (usages.length === 0) {
-            document.getElementById('promocode-analytics-content').innerHTML = '<p style="color: #8b92b0;">Hali hech kim ishlatmagan.</p>';
+            contentEl.innerHTML = '<p style="color: #8b92b0;">Hali hech kim ishlatmagan.</p>';
         } else {
             const html = usages.map(u => `
                 <div style="padding: 10px; background: #0f1429; border: 1px solid #1e2542; margin: 5px 0; border-radius: 8px;">
-                    <strong>${u.first_name || ''} ${u.last_name || ''} (@${u.username || 'no username'})</strong><br>
-                    <small style="color: #8b92b0;">Til: ${u.language_code || 'noma\'lum'} | Ro'yxatdan o'tgan: ${new Date(u.user_created_at).toLocaleDateString()}</small><br>
+                    <strong>${u.full_name || 'N/A'} (@${u.username || 'no username'})</strong><br>
+                    <small style="color: #8b92b0;">Ro'yxatdan o'tgan: ${u.user_created_at ? new Date(u.user_created_at).toLocaleDateString() : '-'}</small><br>
                     <small style="color: #8b92b0;">Ishlatgan: ${new Date(u.used_at).toLocaleString()}</small>
                 </div>
             `).join('');
-            document.getElementById('promocode-analytics-content').innerHTML = html;
+            contentEl.innerHTML = html;
         }
 
         document.getElementById('promocode-analytics-modal').style.display = 'block';
@@ -1379,6 +1468,15 @@ async function loadChannels() {
         });
         const channels = await res.json();
         const listEl = document.getElementById('channels-list');
+
+        if (!Array.isArray(channels)) {
+            listEl.innerHTML = `
+                <div style="background: #141a2e; border: 1px solid #1e2542; padding: 40px; border-radius: 16px; text-align: center;">
+                    <p style="color: #ef4444;">Xatolik: ${channels?.error || 'Server javobi noto\'g\'ri'}</p>
+                </div>
+            `;
+            return;
+        }
 
         if (channels.length === 0) {
             listEl.innerHTML = `
@@ -1462,6 +1560,7 @@ async function toggleChannel(id, currentStatus) {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const channels = await res.json();
+        if (!Array.isArray(channels)) return;
         const channel = channels.find(c => c.id === id);
 
         await fetch(`${API_URL}/channels/${id}`, {
@@ -1497,7 +1596,9 @@ async function loadBroadcasts() {
         const res = await fetch(`${API_URL}/broadcast`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        const posts = await res.json();
+        const postsRaw = await res.json();
+        // Never let a broken history fetch hide the send form - fall back to empty.
+        const posts = Array.isArray(postsRaw) ? postsRaw : [];
         const pageEl = document.getElementById('broadcast-page');
 
         if (posts.length === 0) {
