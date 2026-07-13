@@ -131,18 +131,28 @@ bot.on('channel_post', async (ctx, next) => {
                     parsedTitle: result?.title
                 });
 
-                // Let every admin publish straight from the bot - no computer or
-                // admin panel needed. Everything (title/genre/description) was
-                // already parsed from the caption above; this just assigns a code.
-                // Whichever admin taps the button first publishes it (the others'
-                // button then just says "already published").
+                // The access code is assigned the moment the video arrives, so
+                // write it straight into the channel post. From now on the movie
+                // reads the same everywhere - in the channel and, once published,
+                // in the bot. An admin still has to tap "Nashr qilish" for it to
+                // become reachable by that code (findByCode only returns published
+                // movies), so the code is reserved but not yet live.
                 if (result?.lastInsertRowid) {
                     const id = result.lastInsertRowid;
+                    const code = result.accessCode;
                     const title = result.title || '⏳ Nomi aniqlanmadi';
+
+                    const originalCaption = post.caption || '';
+                    const newCaption = originalCaption
+                        ? `${originalCaption}\n\n🔑 Kod: ${code}`
+                        : `🔑 Kod: ${code}`;
+                    await ctx.telegram.editMessageCaption(post.chat.id, post.message_id, undefined, newCaption)
+                        .catch(err => console.error('[channel_post] Failed to write code into channel caption:', err.message));
+
                     const genreNote = result.genreId ? '' : '\n⚠️ Janr avtomatik aniqlanmadi (admin panelda tuzatish mumkin).';
                     for (const adminId of getAdminIds()) {
                         await ctx.telegram.sendMessage(adminId,
-                            `🎬 <b>Yangi video keldi</b>\n\n${title}${genreNote}\n\nNashr qilishga tayyor - kod avtomatik biriktiriladi.`,
+                            `🎬 <b>Yangi video keldi</b>\n\n${title}\n🔑 Kod: <code>${code}</code>${genreNote}\n\nFoydalanuvchilarga ochilishi uchun "Nashr qilish" ni bosing.`,
                             {
                                 parse_mode: 'HTML',
                                 ...Markup.inlineKeyboard([[Markup.button.callback('✅ Nashr qilish', `movie_publish_auto_${id}`)]])

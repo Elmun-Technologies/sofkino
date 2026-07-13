@@ -230,7 +230,7 @@ async function loadPendingMovies() {
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #0f1429; border: 1px solid #1e2542; border-radius: 10px; margin-bottom: 10px;">
                 <div>
                     <div style="font-weight: 600;">${hasTitle ? p.title : '🎞️ Nomi aniqlanmadi'}</div>
-                    <small style="color: #8b92b0;">${p.genre_name ? '🎭 ' + p.genre_name : '⚠️ Janr aniqlanmadi'} · ${p.created_at || ''}</small>
+                    <small style="color: #8b92b0;">${p.access_code ? '🔑 ' + p.access_code + ' · ' : ''}${p.genre_name ? '🎭 ' + p.genre_name : '⚠️ Janr aniqlanmadi'} · ${p.created_at || ''}</small>
                 </div>
                 <div style="display: flex; gap: 8px;">
                     <button onclick="publishAuto(${p.id})" class="btn-primary" style="margin: 0; padding: 8px 16px;">✅ Nashr qilish</button>

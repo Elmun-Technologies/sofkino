@@ -9,10 +9,35 @@ function isPremiumUser(user) {
     return !!(user && user.is_premium && new Date(user.premium_end) > new Date());
 }
 
-// A missing description must never render as the literal string "null" -
-// `${movie.description}` does exactly that when the DB value is JS null.
-function descriptionBlock(movie) {
-    return movie.description ? `\n\n${movie.description}` : '';
+function escapeHtml(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// The exact text the movie carries in the storage channel. We deliver this
+// verbatim so what the user gets matches the channel one-to-one (description
+// and all). Older movies with no stored caption fall back to the parsed
+// title/description. Everything is HTML-escaped so a caption containing
+// _ * ( ) < etc. can never break Telegram's parser.
+function movieBody(movie) {
+    if (movie.source_caption && movie.source_caption.trim()) {
+        return escapeHtml(movie.source_caption.trim());
+    }
+    const title = movie.title ? `🎬 ${movie.title}` : '🎬';
+    const desc = movie.description ? `\n\n${movie.description}` : '';
+    return escapeHtml(`${title}${desc}`);
+}
+
+function statsFooter(movie) {
+    return `👁 Ko'rilgan: ${movie.views_count} marta\n👍 ${movie.likes_count} | 👎 ${movie.dislikes_count} | 📤 ${movie.shares_count}`;
+}
+
+// Full HTML caption for a delivered movie: channel text + code + stats,
+// with an optional note (e.g. "Kod orqali ochildi") and trailer (promo line).
+function movieCaption(movie, { note = '', trailer = '' } = {}) {
+    const codeLine = movie.access_code ? `\n\n🔑 Kod: <code>${escapeHtml(String(movie.access_code))}</code>` : '';
+    const noteLine = note ? `\n${note}` : '';
+    const trailerBlock = trailer ? `\n\n${trailer}` : '';
+    return `${movieBody(movie)}${codeLine}${noteLine}\n\n${statsFooter(movie)}${trailerBlock}`;
 }
 
 function randomViewedTodayIds(userId) {
@@ -149,8 +174,8 @@ const movieController = {
 
         // Check if user has access
         if (movie.is_premium_only && !isPremium) {
-            return ctx.editMessageText(`🔒 **${movie.title}**${descriptionBlock(movie)}\n\n❌ Bu kino faqat Premium obunachilarga ochiq!\n💎 Premium obunani faollashtiring.`, {
-                parse_mode: 'Markdown',
+            return ctx.editMessageText(`🔒 <b>${escapeHtml(movie.title)}</b>\n\n❌ Bu kino faqat Premium obunachilarga ochiq!\n💎 Premium obunani faollashtiring.`, {
+                parse_mode: 'HTML',
                 ...Markup.inlineKeyboard([
                     [Markup.button.callback('💎 Premium olish', 'premium_plans')],
                     [Markup.button.callback('⬅️ Orqaga', `genre_${movie.genre_id}`)]
@@ -164,11 +189,10 @@ const movieController = {
         await ctx.deleteMessage();
 
         const latestMovie = Movie.findById(movieId);
-        const caption = `🎬 **${latestMovie.title}**${descriptionBlock(latestMovie)}\n\n👁 Ko'rilgan: ${latestMovie.views_count} marta\n👍 ${latestMovie.likes_count} | 👎 ${latestMovie.dislikes_count} | 📤 ${latestMovie.shares_count}`;
 
         await ctx.replyWithVideo(movie.file_id, {
-            caption: caption,
-            parse_mode: 'Markdown',
+            caption: movieCaption(latestMovie),
+            parse_mode: 'HTML',
             ...movieKeyboard(movie)
         });
     },
@@ -181,8 +205,8 @@ const movieController = {
             const { likes, dislikes } = Movie.toggleLike(movieId, ctx.from.id, isLike);
             const movie = Movie.findById(movieId);
 
-            await ctx.editMessageCaption(`🎬 **${movie.title}**${descriptionBlock(movie)}\n\n👁 Ko'rilgan: ${movie.views_count} marta\n👍 ${likes} | 👎 ${dislikes} | 📤 ${movie.shares_count}`, {
-                parse_mode: 'Markdown',
+            await ctx.editMessageCaption(movieCaption(movie), {
+                parse_mode: 'HTML',
                 ...Markup.inlineKeyboard([
                     [
                         Markup.button.callback(`👍 (${likes})`, `movie_like_${movieId}`),
@@ -211,15 +235,15 @@ const movieController = {
         const shareLink = `https://t.me/share/url?url=https://t.me/${ctx.botInfo.username}?start=movie_${movie.access_code}&text=Zo'r kino ekan, ko'rishingizni tavsiya qilaman: ${movie.title}`;
 
         await ctx.answerCbQuery('Ulashish uchun havola tayyor!');
-        await ctx.reply(`📤 **${movie.title}** kinosini ulashish:\n\nQuyidagi havola orqali do'stlaringizga yuboring:\n${shareLink}`, {
-            parse_mode: 'Markdown'
+        await ctx.reply(`📤 <b>${escapeHtml(movie.title)}</b> kinosini ulashish:\n\nQuyidagi havola orqali do'stlaringizga yuboring:\n${escapeHtml(shareLink)}`, {
+            parse_mode: 'HTML'
         });
 
         // Update the original message to reflect share count
         try {
             const updatedMovie = Movie.findById(movieId);
-            await ctx.editMessageCaption(`🎬 **${updatedMovie.title}**${descriptionBlock(updatedMovie)}\n\n👁 Ko'rilgan: ${updatedMovie.views_count} marta\n👍 ${updatedMovie.likes_count} | 👎 ${updatedMovie.dislikes_count} | 📤 ${updatedMovie.shares_count}`, {
-                parse_mode: 'Markdown',
+            await ctx.editMessageCaption(movieCaption(updatedMovie), {
+                parse_mode: 'HTML',
                 ...Markup.inlineKeyboard([
                     [
                         Markup.button.callback(`👍 (${updatedMovie.likes_count})`, `movie_like_${movieId}`),
@@ -245,8 +269,8 @@ const movieController = {
         const isPremium = isPremiumUser(user);
 
         if (movie.is_premium_only && !isPremium) {
-            return ctx.reply(`🔒 **${movie.title}**\n\nBu kino faqat Premium obunachilarga ochiq!\n💎 Premium obunani faollashtiring.`, {
-                parse_mode: 'Markdown',
+            return ctx.reply(`🔒 <b>${escapeHtml(movie.title)}</b>\n\nBu kino faqat Premium obunachilarga ochiq!\n💎 Premium obunani faollashtiring.`, {
+                parse_mode: 'HTML',
                 ...Markup.inlineKeyboard([
                     [Markup.button.callback('💎 Premium olish', 'premium_plans')]
                 ])
@@ -267,8 +291,8 @@ const movieController = {
         const updatedMovie = Movie.findById(movie.id);
 
         await ctx.replyWithVideo(movie.file_id, {
-            caption: `🎬 **${updatedMovie.title}**${descriptionBlock(updatedMovie)}\n\n✅ Kod orqali ochildi!\n👁 Ko'rilgan: ${updatedMovie.views_count} marta\n👍 ${updatedMovie.likes_count} | 👎 ${updatedMovie.dislikes_count} | 📤 ${updatedMovie.shares_count}`,
-            parse_mode: 'Markdown',
+            caption: movieCaption(updatedMovie, { note: '✅ Kod orqali ochildi!' }),
+            parse_mode: 'HTML',
             ...movieKeyboard(updatedMovie, { includeBack: false })
         });
     },
@@ -293,8 +317,8 @@ const movieController = {
         const latestMovie = Movie.findById(movie.id);
 
         await ctx.replyWithVideo(movie.file_id, {
-            caption: `🎲 **${latestMovie.title}**${descriptionBlock(latestMovie)}\n\n👁 Ko'rilgan: ${latestMovie.views_count} marta\n👍 ${latestMovie.likes_count} | 👎 ${latestMovie.dislikes_count} | 📤 ${latestMovie.shares_count}\n\n🎁 Bugungi tekin kinongiz! Ertaga yana bittasi.\nKo'proq ko'rish uchun → 💎 Premium yoki do'st taklif qiling.`,
-            parse_mode: 'Markdown',
+            caption: movieCaption(latestMovie, { trailer: "🎁 Bugungi tekin kinongiz! Ertaga yana bittasi.\nKo'proq ko'rish uchun → 💎 Premium yoki do'st taklif qiling." }),
+            parse_mode: 'HTML',
             ...movieKeyboard(movie, { includeBack: false })
         });
     },
@@ -325,8 +349,8 @@ const movieController = {
         const latestMovie = Movie.findById(movie.id);
 
         await ctx.replyWithVideo(movie.file_id, {
-            caption: `🎁 **${latestMovie.title}**${descriptionBlock(latestMovie)}\n\n👁 Ko'rilgan: ${latestMovie.views_count} marta\n👍 ${latestMovie.likes_count} | 👎 ${latestMovie.dislikes_count} | 📤 ${latestMovie.shares_count}`,
-            parse_mode: 'Markdown',
+            caption: movieCaption(latestMovie),
+            parse_mode: 'HTML',
             ...movieKeyboard(movie, { includeBack: false })
         });
     },
