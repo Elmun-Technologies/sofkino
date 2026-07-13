@@ -308,7 +308,13 @@ bot.hears('📋 Tiketlarim', (ctx) => helpController.showMyTickets(ctx));
 bot.hears('⬅️ Orqaga', (ctx) => ctx.reply('Asosiy menyu', mainMenu));
 
 // Launch bot
-bot.launch().then(() => {
+// Telegram remembers the last allowed_updates list used for this bot token
+// across restarts/redeploys, so it must be listed explicitly here - otherwise
+// a previously narrower list (e.g. one without channel_post) keeps applying
+// forever, silently dropping storage-channel posts before they ever reach us.
+bot.launch({
+    allowedUpdates: ['message', 'edited_message', 'callback_query', 'channel_post', 'edited_channel_post']
+}).then(() => {
     console.log('✅ Bot started successfully');
 }).catch((err) => {
     console.error('❌ Bot failed to start:', err);
