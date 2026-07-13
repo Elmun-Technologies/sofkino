@@ -49,26 +49,18 @@ bot.catch((err, ctx) => {
 bot.use(session());
 bot.use(stage.middleware());
 
-// Middleware to track users (with basic demographic tracking for analytics)
+// Middleware to track users
 bot.use(async (ctx, next) => {
     if (ctx.from) {
-        // In a real scenario, we might use a GeoIP service or ask the user
-        // For demonstration/initial tracking, we'll set defaults if not exists
         const user = User.findById(ctx.from.id);
         if (!user) {
-            // New user: random demographics for demo/analytics variety
-            const countries = ["O'zbekiston", "Rossiya", "AQSH", "Qozog'iston"];
-            const interests = ["Drama", "Komediya", "Qo'rqinchli", "Aksiyon", "Fantastika"];
-
-            const randomCountry = countries[Math.floor(Math.random() * countries.length)];
-            const randomAge = Math.floor(Math.random() * (45 - 16 + 1)) + 16;
-            const randomInterest = interests[Math.floor(Math.random() * interests.length)];
-
+            // Country/age/interests start unknown (NULL) until the user actually
+            // provides them (e.g. via the profile edit scene) - no guessed values.
             const { db } = require('./config/db');
             db.prepare(`
-                INSERT INTO users (telegram_id, username, full_name, country, age, interests)
-                VALUES (?, ?, ?, ?, ?, ?)
-            `).run(ctx.from.id, ctx.from.username || null, ctx.from.first_name, randomCountry, randomAge, randomInterest);
+                INSERT INTO users (telegram_id, username, full_name)
+                VALUES (?, ?, ?)
+            `).run(ctx.from.id, ctx.from.username || null, ctx.from.first_name);
         } else {
             User.createOrUpdate(ctx.from.id, ctx.from.username, ctx.from.first_name);
         }
@@ -82,23 +74,49 @@ bot.use(checkSubscription);
 // Movie ingestion from the storage channel
 bot.on('channel_post', (ctx, next) => {
     const post = ctx.channelPost;
-    console.log('STORAGE CHANNEL ID:', post.chat.id);
-
     const storageChannelId = process.env.STORAGE_CHANNEL_ID;
-    if (storageChannelId && String(post.chat.id) === String(storageChannelId)) {
+    const chatIdMatches = !!storageChannelId && String(post.chat.id) === String(storageChannelId);
+
+    console.log('[channel_post] received', {
+        chatId: post.chat.id,
+        chatIdType: typeof post.chat.id,
+        chatType: post.chat.type,
+        messageId: post.message_id,
+        storageChannelIdEnv: storageChannelId,
+        storageChannelIdEnvType: typeof storageChannelId,
+        chatIdMatches
+    });
+
+    if (chatIdMatches) {
         const file = post.video || post.document;
+        console.log('[channel_post] file check', {
+            hasVideo: !!post.video,
+            hasDocument: !!post.document,
+            fileId: file?.file_id,
+            fileSize: file?.file_size,
+            mimeType: file?.mime_type
+        });
+
         if (file) {
             try {
-                Movie.createPending({
+                const result = Movie.createPending({
                     fileId: file.file_id,
                     sourceChannelId: post.chat.id,
                     sourceMessageId: post.message_id
                 });
-                console.log(`Pending movie captured from channel post ${post.message_id}`);
+                console.log('[channel_post] createPending result', {
+                    messageId: post.message_id,
+                    changes: result?.changes,
+                    insertedId: result?.lastInsertRowid
+                });
             } catch (err) {
-                console.error('Failed to save pending movie:', err);
+                console.error('[channel_post] Failed to save pending movie:', err);
             }
+        } else {
+            console.log('[channel_post] no video/document on this post, skipping');
         }
+    } else {
+        console.log('[channel_post] chat.id does not match STORAGE_CHANNEL_ID, ignoring');
     }
 
     return next();

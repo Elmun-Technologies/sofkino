@@ -52,6 +52,7 @@ router.get('/', authMiddleware, async (req, res) => {
 router.get('/pending', authMiddleware, async (req, res) => {
     try {
         const pending = await db.prepare("SELECT id, created_at FROM movies WHERE status = 'pending' ORDER BY id DESC").all([]);
+        console.log('[GET /movies/pending]', pending.length, 'pending row(s)');
         res.json(pending);
     } catch (err) {
         console.error('Fetch pending movies error:', err);
