@@ -1,4 +1,46 @@
 const { db } = require('../config/db');
+const Genre = require('./Genre');
+
+// Best-effort extraction from a channel post caption like:
+//   🎬 DACHA (2026)
+//   🎭 Janr: Triller / Sleshr / Psixologik qo'rqinchli
+//   🎬 Rejissyor: Sunnat Namozov
+//   ⏱ Davomiyligi: 1:13:49
+//   📦 Hajmi: 2.4 GB
+//   @sofkinolarbot dan yuklandi
+// Title comes from the first line, genre from the "Janr:" line, and the
+// description is the rest of the caption minus the noisy attribution line.
+function parseCaption(caption) {
+    if (!caption) return { title: null, description: null, genreHint: null };
+
+    const lines = caption.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length === 0) return { title: null, description: null, genreHint: null };
+
+    const title = lines[0].replace(/^[^\p{L}\p{N}]+/u, '').trim() || null;
+
+    const genreLine = lines.find(l => /janr/i.test(l));
+    const genreHint = genreLine && genreLine.includes(':')
+        ? genreLine.split(':').slice(1).join(':').trim()
+        : null;
+
+    const description = lines
+        .slice(1)
+        .filter(l => !/dan yuklandi/i.test(l))
+        .join('\n') || null;
+
+    return { title, description, genreHint };
+}
+
+// Match the caption's free-text genre against the curated genre list -
+// e.g. "Triller / Sleshr / Psixologik qo'rqinchli" matches "Qo'rqinchli".
+// Returns null (left for the admin to assign) rather than guessing wrong.
+function matchGenreId(genreHint) {
+    if (!genreHint) return null;
+    const hint = genreHint.toLowerCase();
+    const genres = Genre.getAll();
+    const found = genres.find(g => hint.includes(g.name.toLowerCase()));
+    return found ? found.id : null;
+}
 
 class Movie {
     static findByCode(code) {
@@ -40,16 +82,49 @@ class Movie {
         return stmt.all(genreId, limit);
     }
 
-    static createPending({ fileId, sourceChannelId, sourceMessageId }) {
+    static createPending({ fileId, sourceChannelId, sourceMessageId, caption }) {
+        const { title, description, genreHint } = parseCaption(caption);
+        const genreId = matchGenreId(genreHint);
+
         const stmt = db.prepare(`
-            INSERT INTO movies (title, file_id, source_channel_id, source_message_id, status)
-            VALUES ('⏳ Kutilmoqda', ?, ?, ?, 'pending')
+            INSERT INTO movies (title, description, genre_id, file_id, source_channel_id, source_message_id, source_caption, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
         `);
-        return stmt.run(fileId, String(sourceChannelId), sourceMessageId);
+        const result = stmt.run(title || '⏳ Kutilmoqda', description, genreId, fileId, String(sourceChannelId), sourceMessageId, caption || null);
+
+        return { ...result, title: title || null, genreId };
     }
 
     static getPending() {
-        return db.prepare("SELECT * FROM movies WHERE status = 'pending' ORDER BY id DESC").all();
+        return db.prepare(`
+            SELECT m.*, g.name as genre_name
+            FROM movies m
+            LEFT JOIN genres g ON m.genre_id = g.id
+            WHERE m.status = 'pending'
+            ORDER BY m.id DESC
+        `).all();
+    }
+
+    // One-click publish: keeps whatever title/genre/description were parsed
+    // from the channel caption at ingest time, just assigns a fresh code.
+    static publishAuto(id) {
+        const movie = db.prepare("SELECT * FROM movies WHERE id = ? AND status = 'pending'").get(id);
+        if (!movie) return null;
+
+        let accessCode = null;
+        for (let i = 0; i < 5; i++) {
+            const candidate = String(Math.floor(Math.random() * 9000) + 1000);
+            if (!db.prepare('SELECT 1 FROM movies WHERE access_code = ?').get(candidate)) {
+                accessCode = candidate;
+                break;
+            }
+        }
+        if (!accessCode) accessCode = String(Date.now()).slice(-6);
+
+        db.prepare("UPDATE movies SET access_code = ?, status = 'published' WHERE id = ?").run(accessCode, id);
+
+        const genre = movie.genre_id ? Genre.findById(movie.genre_id) : null;
+        return { id, title: movie.title, accessCode, genreName: genre ? genre.name : null };
     }
 
     static publish(id, movie) {

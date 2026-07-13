@@ -48,14 +48,54 @@ router.get('/', authMiddleware, async (req, res) => {
     }
 });
 
-// Movies captured from the storage channel that still need title/code/genre
+// Movies captured from the storage channel that still need title/code/genre.
+// title/description/genre_id were already best-effort parsed from the channel
+// post's caption when the video came in - shown here so the admin can just
+// confirm and publish instead of re-typing everything.
 router.get('/pending', authMiddleware, async (req, res) => {
     try {
-        const pending = await db.prepare("SELECT id, created_at FROM movies WHERE status = 'pending' ORDER BY id DESC").all([]);
+        const pending = await db.prepare(`
+            SELECT m.id, m.title, m.description, m.created_at, g.name as genre_name
+            FROM movies m
+            LEFT JOIN genres g ON m.genre_id = g.id
+            WHERE m.status = 'pending'
+            ORDER BY m.id DESC
+        `).all([]);
         console.log('[GET /movies/pending]', pending.length, 'pending row(s)');
         res.json(pending);
     } catch (err) {
         console.error('Fetch pending movies error:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// One-click publish: keeps the title/genre/description already parsed from
+// the channel caption, just assigns a fresh access code.
+router.put('/:id/publish-auto', authMiddleware, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const movie = await db.prepare("SELECT * FROM movies WHERE id = ? AND status = 'pending'").get([id]);
+
+        if (!movie) {
+            return res.status(404).json({ error: 'Kutilayotgan video topilmadi yoki allaqachon nashr qilingan' });
+        }
+
+        let accessCode = null;
+        for (let i = 0; i < 5; i++) {
+            const candidate = (Math.floor(Math.random() * 9000) + 1000).toString();
+            const existing = await db.prepare('SELECT id FROM movies WHERE access_code = ?').get([candidate]);
+            if (!existing) {
+                accessCode = candidate;
+                break;
+            }
+        }
+        if (!accessCode) accessCode = Date.now().toString().slice(-6);
+
+        await db.prepare("UPDATE movies SET access_code = ?, status = 'published' WHERE id = ?").run([accessCode, id]);
+
+        res.json({ success: true, accessCode, title: movie.title });
+    } catch (err) {
+        console.error('Error auto-publishing movie:', err);
         res.status(500).json({ error: err.message });
     }
 });
