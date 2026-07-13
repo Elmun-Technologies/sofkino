@@ -56,9 +56,9 @@ router.get('/', authMiddleware, async (req, res) => {
         // Forecast for next month (simple linear projection)
         const forecast = Math.round(currentTotal * (1 + growth / 100));
 
-        // Monthly breakdown for the year
+        // Monthly breakdown for the selected year
         const monthlyData = await db.prepare(`
-            SELECT 
+            SELECT
                 strftime('%Y-%m', created_at) as month,
                 SUM(amount) as revenue,
                 COUNT(*) as transactions
@@ -66,7 +66,7 @@ router.get('/', authMiddleware, async (req, res) => {
             WHERE status = 'success' AND strftime('%Y', created_at) = ?
             GROUP BY month
             ORDER BY month
-        `).all([now.getFullYear().toString()]);
+        `).all([start.getFullYear().toString()]);
 
         res.json({
             currentPeriod: {
@@ -90,20 +90,53 @@ router.get('/', authMiddleware, async (req, res) => {
     }
 });
 
-// Get payment methods stats
+// Get payment methods stats, optionally scoped to a date range
 router.get('/payment-methods', authMiddleware, async (req, res) => {
     try {
-        const stats = await db.prepare(`
-            SELECT 
+        const { startDate, endDate } = req.query;
+        let query = `
+            SELECT
                 payment_method,
                 COUNT(*) as count,
                 SUM(amount) as revenue
             FROM payments
             WHERE status = 'success'
-            GROUP BY payment_method
-        `).all([]);
+        `;
+        const params = [];
 
+        if (startDate && endDate) {
+            query += ` AND created_at BETWEEN ? AND ?`;
+            params.push(new Date(startDate).toISOString(), new Date(endDate).toISOString());
+        }
+
+        query += ` GROUP BY payment_method`;
+
+        const stats = await db.prepare(query).all(params);
         res.json(stats);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// List individual successful payments for a tariff within a date range
+router.get('/subscribers', authMiddleware, async (req, res) => {
+    try {
+        const { type, startDate, endDate } = req.query;
+
+        if (!type || !startDate || !endDate) {
+            return res.status(400).json({ error: 'type, startDate va endDate talab qilinadi' });
+        }
+
+        const subscribers = await db.prepare(`
+            SELECT p.amount, p.transaction_id, p.created_at, u.full_name, u.username
+            FROM payments p
+            LEFT JOIN users u ON p.user_id = u.telegram_id
+            WHERE p.status = 'success' AND p.subscription_type = ? AND p.created_at BETWEEN ? AND ?
+            ORDER BY p.created_at DESC
+            LIMIT 500
+        `).all([type, new Date(startDate).toISOString(), new Date(endDate).toISOString()]);
+
+        res.json(subscribers);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

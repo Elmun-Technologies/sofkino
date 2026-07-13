@@ -20,9 +20,13 @@ FROM base AS build
 RUN apt-get update -qq && \
     apt-get install --no-install-recommends -y build-essential node-gyp pkg-config python-is-python3
 
-# Install node modules
+# Install node modules for the bot
 COPY package-lock.json package.json ./
 RUN npm ci
+
+# Install node modules for the admin panel
+COPY admin-panel/package-lock.json admin-panel/package.json ./admin-panel/
+RUN npm ci --prefix admin-panel
 
 # Copy application code
 COPY . .
@@ -38,7 +42,12 @@ COPY --from=build /app /app
 RUN mkdir -p /data
 VOLUME /data
 
-# Start the server by default, this can be overwritten at runtime
-EXPOSE 3000
-ENV DATABASE_URL="file:///data/sqlite.db"
-CMD [ "npm", "run", "start" ]
+# Bot and admin panel run as two processes in one machine so they can
+# share the sqlite file on /data through SQLite's own file locking,
+# the same way they already do when run locally. The bot creates and
+# migrates the schema on boot, so give it a head start before the
+# admin panel opens the same file to avoid racing the initial CREATE
+# TABLE statements on a brand-new volume. `wait -n` needs bash, not
+# the image's default dash /bin/sh.
+ENV DB_PATH="/data/database.sqlite"
+CMD ["bash", "-c", "node src/bot.js & sleep 3 && node admin-panel/server/server.js & wait -n"]

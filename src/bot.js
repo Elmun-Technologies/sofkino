@@ -15,10 +15,10 @@ const premiumController = require('./controllers/premiumController');
 const ratingController = require('./controllers/ratingController');
 const newsController = require('./controllers/newsController');
 const helpController = require('./controllers/helpController');
+const Movie = require('./models/Movie');
 
 // Scenes
 const addGenreScene = require('./scenes/addGenreScene');
-const addMovieScene = require('./scenes/addMovieScene');
 const broadcastScene = require('./scenes/broadcastScene');
 const editProfileScene = require('./scenes/editProfileScene');
 const createTicketScene = require('./scenes/createTicketScene');
@@ -38,32 +38,30 @@ if (!process.env.BOT_TOKEN) {
 }
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
-const stage = new Scenes.Stage([addGenreScene, addMovieScene, broadcastScene, editProfileScene, createTicketScene, manageChannelsScene]);
+const stage = new Scenes.Stage([addGenreScene, broadcastScene, editProfileScene, createTicketScene, manageChannelsScene]);
+
+// Safety net: an error thrown anywhere in the middleware chain would otherwise
+// crash the whole process and take the bot offline for every user.
+bot.catch((err, ctx) => {
+    console.error(`Bot error for update ${ctx.update?.update_id}:`, err);
+});
 
 // Middleware
 bot.use(session());
 bot.use(stage.middleware());
 
-// Middleware to track users (with basic demographic tracking for analytics)
+// Middleware to track users
 bot.use(async (ctx, next) => {
     if (ctx.from) {
-        // In a real scenario, we might use a GeoIP service or ask the user
-        // For demonstration/initial tracking, we'll set defaults if not exists
         const user = User.findById(ctx.from.id);
         if (!user) {
-            // New user: random demographics for demo/analytics variety
-            const countries = ["O'zbekiston", "Rossiya", "AQSH", "Qozog'iston"];
-            const interests = ["Drama", "Komediya", "Qo'rqinchli", "Aksiyon", "Fantastika"];
-
-            const randomCountry = countries[Math.floor(Math.random() * countries.length)];
-            const randomAge = Math.floor(Math.random() * (45 - 16 + 1)) + 16;
-            const randomInterest = interests[Math.floor(Math.random() * interests.length)];
-
+            // Country/age/interests start unknown (NULL) until the user actually
+            // provides them (e.g. via the profile edit scene) - no guessed values.
             const { db } = require('./config/db');
             db.prepare(`
-                INSERT INTO users (telegram_id, username, full_name, country, age, interests)
-                VALUES (?, ?, ?, ?, ?, ?)
-            `).run(ctx.from.id, ctx.from.username || null, ctx.from.first_name, randomCountry, randomAge, randomInterest);
+                INSERT INTO users (telegram_id, username, full_name)
+                VALUES (?, ?, ?)
+            `).run(ctx.from.id, ctx.from.username || null, ctx.from.first_name);
         } else {
             User.createOrUpdate(ctx.from.id, ctx.from.username, ctx.from.first_name);
         }
@@ -86,6 +84,57 @@ bot.use(async (ctx, next) => {
 
 // Mandatory Subscription Check
 bot.use(checkSubscription);
+
+// Movie ingestion from the storage channel
+bot.on('channel_post', (ctx, next) => {
+    const post = ctx.channelPost;
+    const storageChannelId = process.env.STORAGE_CHANNEL_ID;
+    const chatIdMatches = !!storageChannelId && String(post.chat.id) === String(storageChannelId);
+
+    console.log('[channel_post] received', {
+        chatId: post.chat.id,
+        chatIdType: typeof post.chat.id,
+        chatType: post.chat.type,
+        messageId: post.message_id,
+        storageChannelIdEnv: storageChannelId,
+        storageChannelIdEnvType: typeof storageChannelId,
+        chatIdMatches
+    });
+
+    if (chatIdMatches) {
+        const file = post.video || post.document;
+        console.log('[channel_post] file check', {
+            hasVideo: !!post.video,
+            hasDocument: !!post.document,
+            fileId: file?.file_id,
+            fileSize: file?.file_size,
+            mimeType: file?.mime_type
+        });
+
+        if (file) {
+            try {
+                const result = Movie.createPending({
+                    fileId: file.file_id,
+                    sourceChannelId: post.chat.id,
+                    sourceMessageId: post.message_id
+                });
+                console.log('[channel_post] createPending result', {
+                    messageId: post.message_id,
+                    changes: result?.changes,
+                    insertedId: result?.lastInsertRowid
+                });
+            } catch (err) {
+                console.error('[channel_post] Failed to save pending movie:', err);
+            }
+        } else {
+            console.log('[channel_post] no video/document on this post, skipping');
+        }
+    } else {
+        console.log('[channel_post] chat.id does not match STORAGE_CHANNEL_ID, ignoring');
+    }
+
+    return next();
+});
 
 bot.action('check_sub', async (ctx) => {
     const activeChannels = require('./models/Channel').getAll(true);
@@ -130,7 +179,6 @@ bot.command('admin', isAdmin, (ctx) => {
 });
 
 bot.hears('➕ Janr qo\'shish', isAdmin, (ctx) => ctx.scene.enter('ADD_GENRE_SCENE'));
-bot.hears('➕ Kino qo\'shish', isAdmin, (ctx) => ctx.scene.enter('ADD_MOVIE_SCENE'));
 bot.hears('👥 Foydalanuvchilar', isAdmin, (ctx) => {
     const { db } = require('./config/db');
     const users = db.prepare('SELECT * FROM users ORDER BY joined_at DESC LIMIT 20').all();
@@ -236,17 +284,18 @@ bot.action(/^pay_reject_(\d+)$/, isAdmin, (ctx) => premiumController.rejectPayme
 // User Commands - Code Input
 let waitingForCode = {};
 
-bot.hears('🔑 Kod kiritish', (ctx) => {
+bot.hears('🔑 Kino kodini kiriting', (ctx) => {
     waitingForCode[ctx.from.id] = true;
     ctx.reply('🔑 Kino kodini kiriting:\n\nMasalan: 101, 777, ABC123');
 });
 
 // Handle code input
-bot.on('text', (ctx) => {
+bot.on('text', (ctx, next) => {
     if (waitingForCode[ctx.from.id]) {
         delete waitingForCode[ctx.from.id];
         return movieController.unlockByCode(ctx, ctx.message.text);
     }
+    return next();
 });
 
 // Help
@@ -255,7 +304,7 @@ bot.hears('📞 Yordam', (ctx) => {
 
 ❓ Kino qanday topiladi?
 - Janrlar orqali: 🎬 Kinolar → Janrni tanlang
-- Kod orqali: 🔑 Kod kiritish → Kodni kiriting
+- Kod orqali: 🔑 Kino kodini kiriting → Kodni kiriting
 
 💎 Premium nima?
 - Premium obunachilarga maxsus kinolar va reklamasiz ko'rish imkoniyati beriladi.
@@ -292,7 +341,13 @@ bot.hears('📋 Tiketlarim', (ctx) => helpController.showMyTickets(ctx));
 bot.hears('⬅️ Orqaga', (ctx) => ctx.reply('Asosiy menyu', mainMenu));
 
 // Launch bot
-bot.launch().then(() => {
+// Telegram remembers the last allowed_updates list used for this bot token
+// across restarts/redeploys, so it must be listed explicitly here - otherwise
+// a previously narrower list (e.g. one without channel_post) keeps applying
+// forever, silently dropping storage-channel posts before they ever reach us.
+bot.launch({
+    allowedUpdates: ['message', 'edited_message', 'callback_query', 'channel_post', 'edited_channel_post']
+}).then(() => {
     console.log('✅ Bot started successfully');
     require('./jobs/progrevJob').start(bot.telegram);
 }).catch((err) => {

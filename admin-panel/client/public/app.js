@@ -1,4 +1,4 @@
-const API_URL = 'http://localhost:3000/api';
+const API_URL = window.location.origin + '/api';
 let token = localStorage.getItem('admin_token');
 
 // DOM Elements
@@ -14,6 +14,14 @@ function formatNumber(num) {
 // Helper: Random number
 function random(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+// Keep the year filter's options current instead of a hardcoded past year
+const yearFilterEl = document.getElementById('year-filter');
+if (yearFilterEl) {
+    const currentYear = new Date().getFullYear();
+    yearFilterEl.innerHTML = [currentYear, currentYear - 1, currentYear - 2, currentYear - 3]
+        .map(y => `<option value="${y}">${y}</option>`).join('');
 }
 
 // Login
@@ -93,7 +101,6 @@ document.querySelectorAll('.nav-link').forEach(link => {
 });
 
 // Movie Management Initializers
-document.getElementById('add-movie-btn').addEventListener('click', openAddMovieModal);
 document.getElementById('close-add-movie').addEventListener('click', () => {
     document.getElementById('add-movie-modal').style.display = 'none';
 });
@@ -102,52 +109,7 @@ document.getElementById('random-code-btn').addEventListener('click', () => {
     document.getElementById('movie-access-code').value = random(1, 10000);
 });
 
-// File input change handler and Drag & Drop
-const movieFileInput = document.getElementById('movie-file-input');
-const dropzone = document.getElementById('dropzone');
-
-if (movieFileInput && dropzone) {
-    movieFileInput.addEventListener('change', function () {
-        handleFileSelect(this.files[0]);
-    });
-
-    dropzone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropzone.classList.add('active');
-        dropzone.style.borderColor = 'white';
-    });
-
-    dropzone.addEventListener('dragleave', () => {
-        dropzone.classList.remove('active');
-        dropzone.style.borderColor = '#667eea';
-    });
-
-    dropzone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropzone.classList.remove('active');
-        const files = e.dataTransfer.files;
-        if (files.length) {
-            movieFileInput.files = files;
-            handleFileSelect(files[0]);
-        }
-    });
-}
-
-function handleFileSelect(file) {
-    const fileNameDisplay = document.getElementById('file-name-display');
-    const dzone = document.getElementById('dropzone');
-    if (file) {
-        fileNameDisplay.textContent = '✅ ' + file.name;
-        fileNameDisplay.style.color = '#10b981';
-        dzone.classList.add('active');
-        dzone.style.borderColor = '#10b981';
-    } else {
-        fileNameDisplay.textContent = 'Kino faylini tanlang yoki sudrab keling';
-        fileNameDisplay.style.color = 'white';
-        dzone.classList.remove('active');
-        dzone.style.borderColor = '#667eea';
-    }
-}
+document.getElementById('add-movie-form').addEventListener('submit', handleAddMovie);
 
 // Channel management initializers
 document.getElementById('add-channel-btn').addEventListener('click', () => {
@@ -189,9 +151,10 @@ document.getElementById('users-filter-form').addEventListener('submit', (e) => {
     loadUsers(filters);
 });
 
-async function openAddMovieModal() {
+async function openPublishModal(pendingId) {
     const modal = document.getElementById('add-movie-modal');
     modal.style.display = 'block';
+    document.getElementById('movie-pending-id').value = pendingId;
 
     // Load genres into select
     try {
@@ -206,26 +169,56 @@ async function openAddMovieModal() {
     }
 }
 
+async function loadPendingMovies() {
+    const listEl = document.getElementById('pending-movies-list');
+    try {
+        const res = await fetch(`${API_URL}/movies/pending`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const pending = await res.json();
+
+        if (pending.length === 0) {
+            listEl.innerHTML = '<p style="color: #8b92b0;">Hozircha kutilayotgan video yo\'q. Videoni saqlash kanaliga yuboring.</p>';
+            return;
+        }
+
+        listEl.innerHTML = pending.map(p => `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #0f1429; border: 1px solid #1e2542; border-radius: 10px; margin-bottom: 10px;">
+                <span style="color: #8b92b0;">🎞️ Yangi video keldi, vaqti: ${p.created_at || 'N/A'}</span>
+                <button onclick="openPublishModal(${p.id})" class="btn-primary" style="margin: 0; padding: 8px 16px;">✅ Nashr qilish</button>
+            </div>
+        `).join('');
+    } catch (err) {
+        console.error('loadPendingMovies error:', err);
+        listEl.innerHTML = `<p style="color: #ef4444;">Xatolik: ${err.message}</p>`;
+    }
+}
+
 async function handleAddMovie(e) {
     e.preventDefault();
     const form = e.target;
-    const formData = new FormData(form);
+    const data = Object.fromEntries(new FormData(form).entries());
+    const pendingId = data.pendingId;
 
     try {
         const saveBtn = form.querySelector('button[type="submit"]');
         const originalText = saveBtn.textContent;
-        saveBtn.textContent = 'Yuklanmoqda...';
+        saveBtn.textContent = 'Saqlanmoqda...';
         saveBtn.disabled = true;
 
-        const res = await fetch(`${API_URL}/movies`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}` },
-            body: formData
+        const res = await fetch(`${API_URL}/movies/${pendingId}/publish`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
         });
 
         const result = await res.json();
         if (result.success) {
             form.reset();
+            document.getElementById('add-movie-modal').style.display = 'none';
             loadMovies();
         } else {
             alert('Xatolik: ' + (result.error || 'Noma\'lum xato'));
@@ -349,7 +342,7 @@ async function loadPremium() {
         document.getElementById('reset-filters').addEventListener('click', () => {
             document.getElementById('subscription-type-filter').value = 'all';
             document.getElementById('month-filter').value = 'all';
-            document.getElementById('year-filter').value = '2025';
+            document.getElementById('year-filter').value = new Date().getFullYear().toString();
             document.getElementById('start-date').value = '';
             document.getElementById('end-date').value = '';
             loadPremiumData();
@@ -385,80 +378,99 @@ async function loadPremium() {
     await loadPremiumData();
 }
 
+// Resolve the active date range from the filter inputs: an explicit custom
+// range wins, otherwise it's derived from the selected month/year.
+function getSelectedDateRange() {
+    const month = document.getElementById('month-filter').value;
+    const year = parseInt(document.getElementById('year-filter').value);
+    const startInput = document.getElementById('start-date').value;
+    const endInput = document.getElementById('end-date').value;
+
+    if (startInput && endInput) {
+        return { start: new Date(startInput), end: new Date(endInput) };
+    }
+
+    if (month === 'all') {
+        return { start: new Date(year, 0, 1), end: new Date(year, 11, 31, 23, 59, 59) };
+    }
+
+    const monthNum = parseInt(month);
+    return { start: new Date(year, monthNum, 1), end: new Date(year, monthNum + 1, 0, 23, 59, 59) };
+}
+
 async function loadPremiumData() {
+    const applyBtn = document.getElementById('apply-filters');
+    const originalText = applyBtn ? applyBtn.textContent : null;
+
     try {
         const tariffType = document.getElementById('subscription-type-filter').value;
         const month = document.getElementById('month-filter').value;
         const year = document.getElementById('year-filter').value;
-        const startDate = document.getElementById('start-date').value;
-        const endDate = document.getElementById('end-date').value;
 
-        // Visual feedback - loading state
-        const applyBtn = document.getElementById('apply-filters');
         if (applyBtn) {
-            const originalText = applyBtn.textContent;
             applyBtn.textContent = 'Yuklanmoqda...';
             applyBtn.disabled = true;
-
-            // Generate realistic random data based on filters
-            setTimeout(() => {
-                const data = generateRandomPremiumData(tariffType, month, year, startDate, endDate);
-                updatePremiumUI(data);
-
-                applyBtn.textContent = originalText;
-                applyBtn.disabled = false;
-            }, 600);
         }
 
+        const { start, end } = getSelectedDateRange();
+        const params = `startDate=${start.toISOString()}&endDate=${end.toISOString()}`;
+
+        const [premiumRes, methodsRes] = await Promise.all([
+            fetch(`${API_URL}/premium?${params}`, { headers: { 'Authorization': `Bearer ${token}` } }),
+            fetch(`${API_URL}/premium/payment-methods?${params}`, { headers: { 'Authorization': `Bearer ${token}` } })
+        ]);
+
+        const premium = await premiumRes.json();
+        const methods = await methodsRes.json();
+
+        const data = buildPremiumData(premium, methods, tariffType, month, year);
+        updatePremiumUI(data);
     } catch (err) {
         console.error('loadPremiumData error:', err);
+    } finally {
+        if (applyBtn) {
+            applyBtn.textContent = originalText;
+            applyBtn.disabled = false;
+        }
     }
 }
 
-function generateRandomPremiumData(tariff, month, year, start, end) {
-    // Pricing constants
-    const prices = {
-        monthly: 14990,
-        quarterly: 39990,
-        semi_annual: 79900,
-        lifetime: 129900
-    };
-
-    // Base counts for ONE month
-    const baseCounts = {
-        monthly: random(80, 150),
-        quarterly: random(30, 60),
-        semi_annual: random(15, 30),
-        lifetime: random(5, 15)
-    };
-
-    // Apply multipliers for "All" (Annual) or specific month
-    let multiplier = 1;
-    if (month === 'all') {
-        multiplier = (year === '2025' ? 1 : 12); // If current year, maybe only 1 month so far, else 12
-    }
+// Reshape the real /api/premium + /api/premium/payment-methods responses into
+// what the UI renders. Every number here comes from the payments table -
+// tariffs/months/methods with no payments simply come out as 0.
+function buildPremiumData(premium, methods, tariff, month, year) {
+    const prices = { monthly: 14990, quarterly: 39990, semi_annual: 79900, lifetime: 129900 };
+    const byType = premium?.currentPeriod?.byType || [];
 
     const stats = {};
-    Object.keys(baseCounts).forEach(key => {
-        let count = Math.round(baseCounts[key] * multiplier);
-        if (tariff !== 'all' && tariff !== key) count = 0;
-
-        stats[key] = {
-            count: count,
-            revenue: count * prices[key]
-        };
+    Object.keys(prices).forEach(key => {
+        const row = byType.find(t => t.subscription_type === key);
+        let count = row?.count || 0;
+        let revenue = row?.revenue || 0;
+        if (tariff !== 'all' && tariff !== key) {
+            count = 0;
+            revenue = 0;
+        }
+        stats[key] = { count, revenue };
     });
 
-    const totalRevenue = Object.values(stats).reduce((acc, curr) => acc + curr.revenue, 0);
-    const previousRevenue = Math.round(totalRevenue * (random(80, 95) / 100));
-    const growth = totalRevenue > 0 ? ((totalRevenue - previousRevenue) / previousRevenue * 100).toFixed(1) : "0.0";
-    const forecast = Math.round(totalRevenue * (1 + random(5, 15) / 100));
+    const totalRevenue = Object.values(stats).reduce((acc, s) => acc + s.revenue, 0);
+    const previousRevenue = premium?.comparison?.previousPeriod || 0;
+    const growth = premium?.comparison?.growth || 0;
+    const forecast = premium?.forecast?.nextMonth || 0;
 
-    // Generate consistent monthly history for the chart
+    const breakdown = premium?.monthlyBreakdown || [];
     const monthlyHistory = [];
     for (let i = 0; i < 12; i++) {
-        monthlyHistory.push(Math.round(totalRevenue / (month === 'all' ? 12 : 1) * (random(80, 120) / 100)));
+        const key = `${year}-${String(i + 1).padStart(2, '0')}`;
+        const entry = breakdown.find(m => m.month === key);
+        monthlyHistory.push(entry?.revenue || 0);
     }
+
+    const paymentMethods = {
+        payme: (methods || []).find(m => m.payment_method === 'payme')?.revenue || 0,
+        click: (methods || []).find(m => m.payment_method === 'click')?.revenue || 0
+    };
 
     return {
         stats,
@@ -469,7 +481,8 @@ function generateRandomPremiumData(tariff, month, year, start, end) {
         tariff,
         month: month === 'all' ? 'Barcha oylar' : month,
         year,
-        monthlyHistory
+        monthlyHistory,
+        paymentMethods
     };
 }
 
@@ -517,13 +530,13 @@ function updatePremiumUI(data) {
 
     // Update charts
     updateMonthlyChart(data);
-    updatePaymentMethodsUI(data.totalRevenue);
+    updatePaymentMethodsUI(data.paymentMethods);
 
     // Bind Excel Export with latest data
     document.getElementById('export-excel').onclick = () => exportToExcel(data);
 }
 
-function showSubscriptionDetails(typeKey, stat) {
+async function showSubscriptionDetails(typeKey, stat) {
     const modal = document.getElementById('details-modal');
     const title = document.getElementById('details-title');
     const body = document.getElementById('details-body');
@@ -538,74 +551,65 @@ function showSubscriptionDetails(typeKey, stat) {
     title.textContent = titles[typeKey];
     modal.style.display = 'block';
 
-    if (stat.count === 0) {
+    if (!stat || stat.count === 0) {
         body.innerHTML = '<p style="color: #8b92b0; text-align: center; padding: 40px;">Ushbu davrda obunachilar topilmadi.</p>';
         return;
     }
 
-    // Generate random subscribers for the list
-    const subscribers = generateMockSubscribers(stat.count, typeKey);
+    body.innerHTML = '<p style="color: #8b92b0; text-align: center; padding: 40px;">Yuklanmoqda...</p>';
 
-    const tableHtml = `
-        <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
-            <thead>
-                <tr style="text-align: left; color: #8b92b0; font-size: 11px; text-transform: uppercase;">
-                    <th style="padding: 12px;">FOYDALANUVCHI</th>
-                    <th style="padding: 12px;">TO'LOV SUMMASI</th>
-                    <th style="padding: 12px;">SANA</th>
-                    <th style="padding: 12px;">AMAL</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${subscribers.slice(0, 50).map(s => `
-                    <tr style="border-bottom: 1px solid #1e2542;">
-                        <td style="padding: 15px;">
-                            <div style="font-weight: 600;">${s.name}</div>
-                            <div style="font-size: 11px; color: #8b92b0;">@${s.username}</div>
-                        </td>
-                        <td style="padding: 15px; color: #10b981; font-weight: 700;">${formatNumber(s.amount)} SO'M</td>
-                        <td style="padding: 15px; font-size: 12px; color: #8b92b0;">${s.date}</td>
-                        <td style="padding: 15px;">
-                            <button onclick="downloadReceipt('${s.name}', '${s.amount}', '${s.date}', '${typeKey}')" 
-                                    style="background: rgba(102, 126, 234, 0.1); color: #667eea; border: 1px solid rgba(102, 126, 234, 0.2); padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 11px;">
-                                📄 Chek yuklash
-                            </button>
-                        </td>
-                    </tr>
-                `).join('')}
-            </tbody>
-        </table>
-        ${stat.count > 50 ? `<p style="text-align: center; color: #8b92b0; font-size: 12px; margin-top: 15px;">Va yana ${stat.count - 50} ta obunachi...</p>` : ''}
-    `;
-
-    body.innerHTML = tableHtml;
-}
-
-function generateMockSubscribers(count, type) {
-    const names = ['Abror', 'Sardor', 'Malika', 'Jasur', 'Dilshod', 'Nozima', 'Rustam', 'Bekzod', 'Shahlo', 'Iroda', 'Anvar', 'Bobur', 'Farrux', 'Guli'];
-    const surnames = ['Elmurodov', 'Karimov', 'Sultonov', 'Aliev', 'Yusupov', 'Rasulova', 'Abidov', 'Nazarov', 'Toshpulatov'];
-    const rates = { monthly: 14990, quarterly: 39990, semi_annual: 79900, lifetime: 129900 };
-
-    const list = [];
-    for (let i = 0; i < count; i++) {
-        const name = names[random(0, names.length - 1)];
-        const surname = surnames[random(0, surnames.length - 1)];
-        const day = random(1, 28);
-        const monthNum = random(1, 12);
-        const date = `${day < 10 ? '0' + day : day}.${monthNum < 10 ? '0' + monthNum : monthNum}.2025`;
-
-        list.push({
-            name: `${name} ${surname}`,
-            username: `${name.toLowerCase()}${random(10, 99)}`,
-            amount: rates[type],
-            date: date
+    try {
+        const { start, end } = getSelectedDateRange();
+        const res = await fetch(`${API_URL}/premium/subscribers?type=${typeKey}&startDate=${start.toISOString()}&endDate=${end.toISOString()}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
         });
+        const subscribers = await res.json();
+
+        if (!subscribers.length) {
+            body.innerHTML = '<p style="color: #8b92b0; text-align: center; padding: 40px;">Ushbu davrda obunachilar topilmadi.</p>';
+            return;
+        }
+
+        const tableHtml = `
+            <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+                <thead>
+                    <tr style="text-align: left; color: #8b92b0; font-size: 11px; text-transform: uppercase;">
+                        <th style="padding: 12px;">FOYDALANUVCHI</th>
+                        <th style="padding: 12px;">TO'LOV SUMMASI</th>
+                        <th style="padding: 12px;">SANA</th>
+                        <th style="padding: 12px;">AMAL</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${subscribers.slice(0, 50).map(s => `
+                        <tr style="border-bottom: 1px solid #1e2542;">
+                            <td style="padding: 15px;">
+                                <div style="font-weight: 600;">${s.full_name || 'Noma\'lum'}</div>
+                                <div style="font-size: 11px; color: #8b92b0;">@${s.username || '-'}</div>
+                            </td>
+                            <td style="padding: 15px; color: #10b981; font-weight: 700;">${formatNumber(s.amount)} SO'M</td>
+                            <td style="padding: 15px; font-size: 12px; color: #8b92b0;">${new Date(s.created_at).toLocaleDateString()}</td>
+                            <td style="padding: 15px;">
+                                <button onclick="downloadReceipt('${(s.full_name || 'Nomalum').replace(/'/g, '')}', '${s.amount}', '${new Date(s.created_at).toLocaleDateString()}', '${typeKey}', '${s.transaction_id || ''}')"
+                                        style="background: rgba(102, 126, 234, 0.1); color: #667eea; border: 1px solid rgba(102, 126, 234, 0.2); padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 11px;">
+                                    📄 Chek yuklash
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+            ${subscribers.length > 50 ? `<p style="text-align: center; color: #8b92b0; font-size: 12px; margin-top: 15px;">Va yana ${subscribers.length - 50} ta obunachi...</p>` : ''}
+        `;
+
+        body.innerHTML = tableHtml;
+    } catch (err) {
+        console.error('showSubscriptionDetails error:', err);
+        body.innerHTML = `<p style="color: #ef4444; text-align: center; padding: 40px;">Xatolik: ${err.message}</p>`;
     }
-    // Sort by date (desc)
-    return list.sort((a, b) => b.date.localeCompare(a.date));
 }
 
-function downloadReceipt(name, amount, date, type) {
+function downloadReceipt(name, amount, date, type, transactionId) {
     const typeNames = {
         monthly: 'OYLIK',
         quarterly: '3 OYLIK',
@@ -613,29 +617,6 @@ function downloadReceipt(name, amount, date, type) {
         lifetime: 'UMRBOD'
     };
 
-    const receiptHtml = `
-        <div style="background: white; color: black; padding: 30px; width: 300px; font-family: 'Courier New', Courier, monospace; border: 1px dashed black; text-align: center;">
-            <h2 style="margin: 0;">SOFKINO</h2>
-            <p style="font-size: 12px; margin: 5px 0;">TELEGRAM PREMIUM OBUNA</p>
-            <p style="margin: 10px 0;">-----------------------</p>
-            <div style="text-align: left; font-size: 14px;">
-                <p>NOMI: ${typeNames[type]} TARIF</p>
-                <p>MUDDATI: ${type === 'lifetime' ? 'UMRBOD' : (type === 'monthly' ? '1 OY' : (type === 'quarterly' ? '3 OY' : '6 OY'))}</p>
-                <p>KLIYENT: ${name}</p>
-                <p>SANA: ${date}</p>
-                <p>SUMMA: ${formatNumber(amount)} UZS</p>
-            </div>
-            <p style="margin: 10px 0;">-----------------------</p>
-            <p style="font-size: 10px;">ID: ${random(1000000, 9999999)}</p>
-            <p style="font-weight: bold; margin-top: 10px;">TO'LANGAN</p>
-        </div>
-    `;
-
-    // Visual feedback
-    alert(`Chek generatsiya qilindi: ${name} uchun. Excel hisobotda barcha tranzaksiyalar mavjud.`);
-
-    // Actually download as simple text if needed, or just mock the feeling.
-    // For a real app, we'd use html2canvas or similar, but here we can just create a text file.
     const textBlob = `
 SOFKINO RECEIPT
 -----------------------
@@ -645,7 +626,7 @@ SANA: ${date}
 SUMMA: ${amount} UZS
 HOLATI: YAKUNLANDI
 -----------------------
-ID: ${random(1000000, 9999999)}
+ID: ${transactionId || 'N/A'}
     `;
     const blob = new Blob([textBlob], { type: 'text/plain' });
     const link = document.createElement('a');
@@ -682,9 +663,12 @@ function updateMonthlyChart(data) {
     `;
 }
 
-function updatePaymentMethodsUI(total) {
-    const payme = Math.round(total * 0.62);
-    const click = total - payme;
+function updatePaymentMethodsUI(methods) {
+    const payme = methods?.payme || 0;
+    const click = methods?.click || 0;
+    const total = payme + click;
+    const paymePct = total > 0 ? Math.round((payme / total) * 100) : 0;
+    const clickPct = total > 0 ? 100 - paymePct : 0;
 
     document.getElementById('payment-methods').innerHTML = `
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
@@ -699,14 +683,14 @@ function updatePaymentMethodsUI(total) {
                 </div>
                 <div style="font-size: 22px; font-weight: 700; color: #00baff;">${formatNumber(payme)} SO'M</div>
                 <div style="margin-top: 10px; background: rgba(255,255,255,0.05); height: 6px; border-radius: 3px;">
-                    <div style="background: #00baff; width: 62%; height: 100%; border-radius: 3px;"></div>
+                    <div style="background: #00baff; width: ${paymePct}%; height: 100%; border-radius: 3px;"></div>
                 </div>
                 <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px;">
                     <span style="color: #8b92b0;">Ulush</span>
-                    <span style="color: #00baff; font-weight: 600;">62%</span>
+                    <span style="color: #00baff; font-weight: 600;">${paymePct}%</span>
                 </div>
             </div>
-            
+
             <div style="background: #0f1429; padding: 20px; border-radius: 12px; border: 1px solid rgba(245, 158, 11, 0.2); position: relative; overflow: hidden;">
                 <div style="position: absolute; top: -10px; right: -10px; font-size: 60px; opacity: 0.05;">💰</div>
                 <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 15px;">
@@ -718,11 +702,11 @@ function updatePaymentMethodsUI(total) {
                 </div>
                 <div style="font-size: 22px; font-weight: 700; color: #f59e0b;">${formatNumber(click)} SO'M</div>
                 <div style="margin-top: 10px; background: rgba(255,255,255,0.05); height: 6px; border-radius: 3px;">
-                    <div style="background: #f59e0b; width: 38%; height: 100%; border-radius: 3px;"></div>
+                    <div style="background: #f59e0b; width: ${clickPct}%; height: 100%; border-radius: 3px;"></div>
                 </div>
                 <div style="display: flex; justify-content: space-between; margin-top: 8px; font-size: 11px;">
                     <span style="color: #8b92b0;">Ulush</span>
-                    <span style="color: #f59e0b; font-weight: 600;">38%</span>
+                    <span style="color: #f59e0b; font-weight: 600;">${clickPct}%</span>
                 </div>
             </div>
         </div>
@@ -733,6 +717,8 @@ function updatePaymentMethodsUI(total) {
 async function loadMovies() {
     const listEl = document.getElementById('movies-list');
     const topRowEl = document.getElementById('movies-top-row');
+
+    loadPendingMovies();
 
     try {
         const country = document.getElementById('movie-filter-country').value;
@@ -750,18 +736,7 @@ async function loadMovies() {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const movies = await res.json();
-
-        // Separate top movies (e.g., top 3 by views)
-        let displayMovies = movies;
-        if (movies.length === 0) {
-            // Provide "Namuna" (Sample) data if empty
-            displayMovies = [
-                { id: 9991, title: 'Forsaj 10', genre_name: 'Ekshn', views_count: 15420, likes_count: 1240, shares_count: 450, rating: 8.5, access_code: '7777', telegram_link: '#', external_link_web: '#', total_watch_time: 450000 },
-                { id: 9992, title: 'Avatar: Suv Yo\'li', genre_name: 'Fantastika', views_count: 12300, likes_count: 980, shares_count: 320, rating: 9.1, access_code: '8888', telegram_link: '#', external_link_web: '#', total_watch_time: 620000 },
-                { id: 9993, title: 'Oppenheimer', genre_name: 'Drama', views_count: 8900, likes_count: 1100, shares_count: 210, rating: 8.9, access_code: '9999', telegram_link: '#', external_link_web: '#', total_watch_time: 310000 },
-                { id: 9994, title: 'Barbie', genre_name: 'Komediya', views_count: 7500, likes_count: 650, shares_count: 540, rating: 7.2, access_code: '1111', telegram_link: '#', external_link_web: '#', total_watch_time: 120000 }
-            ];
-        }
+        const displayMovies = movies;
 
         const sortedMovies = [...displayMovies].sort((a, b) => (b.views_count || 0) - (a.views_count || 0));
         const topMovies = sortedMovies.slice(0, 4);
@@ -793,22 +768,22 @@ async function loadMovies() {
             `).join('');
         }
 
-        // Populate Summary Stats (NEW)
-        if (displayMovies.length > 0) {
-            const countEl = document.getElementById('movie-total-count');
-            const viewsEl = document.getElementById('movie-total-views');
-            const rateEl = document.getElementById('movie-avg-rating');
-            const shareEl = document.getElementById('movie-total-shares');
+        // Populate Summary Stats - always reflects the current result set, zero included
+        const countEl = document.getElementById('movie-total-count');
+        const viewsEl = document.getElementById('movie-total-views');
+        const rateEl = document.getElementById('movie-avg-rating');
+        const shareEl = document.getElementById('movie-total-shares');
 
-            if (countEl && viewsEl && rateEl && shareEl) {
-                countEl.textContent = formatNumber(displayMovies.length);
-                const totalViews = displayMovies.reduce((acc, m) => acc + (m.views_count || 0), 0);
-                viewsEl.textContent = formatNumber(totalViews);
-                const avgRatingValue = (displayMovies.reduce((acc, m) => acc + (parseFloat(m.rating) || 0), 0) / displayMovies.length).toFixed(1);
-                rateEl.textContent = avgRatingValue;
-                const totalShares = displayMovies.reduce((acc, m) => acc + (m.shares_count || 0), 0);
-                shareEl.textContent = formatNumber(totalShares);
-            }
+        if (countEl && viewsEl && rateEl && shareEl) {
+            countEl.textContent = formatNumber(displayMovies.length);
+            const totalViews = displayMovies.reduce((acc, m) => acc + (m.views_count || 0), 0);
+            viewsEl.textContent = formatNumber(totalViews);
+            const avgRatingValue = displayMovies.length > 0
+                ? (displayMovies.reduce((acc, m) => acc + (parseFloat(m.rating) || 0), 0) / displayMovies.length).toFixed(1)
+                : '0.0';
+            rateEl.textContent = avgRatingValue;
+            const totalShares = displayMovies.reduce((acc, m) => acc + (m.shares_count || 0), 0);
+            shareEl.textContent = formatNumber(totalShares);
         }
 
         const html = `
@@ -823,7 +798,9 @@ async function loadMovies() {
                     </tr>
                 </thead>
                 <tbody>
-                    ${displayMovies.map(m => `
+                    ${displayMovies.length === 0 ? `
+                        <tr><td colspan="5" style="text-align: center; color: #8b92b0; padding: 40px;">Hozircha kino yo'q. Videoni saqlash kanaliga yuboring va admin panelda nashr qiling.</td></tr>
+                    ` : displayMovies.map(m => `
                         <tr>
                             <td>
                                 <div style="display: flex; align-items: center; gap: 12px;">
@@ -840,12 +817,10 @@ async function loadMovies() {
                                     <div style="display: flex; align-items: center; gap: 8px;">
                                         <span title="Views" style="color: #8b92b0; font-size: 13px;">👁 ${formatNumber(m.views_count)}</span>
                                         <span title="Likes" style="color: #10b981; font-size: 13px;">👍 ${m.likes_count || 0}</span>
-                                        <span style="font-size: 10px; color: #10b981; background: rgba(16, 185, 129, 0.1); padding: 2px 4px; border-radius: 4px;">+${random(5, 15)}%</span>
                                     </div>
                                     <div style="display: flex; align-items: center; gap: 8px;">
                                         <span title="Shares" style="color: #6366f1; font-size: 13px;">📤 ${m.shares_count || 0}</span>
                                         <span title="Watch Time" style="color: #f59e0b; font-size: 12px;">⏳ ${Math.floor((m.total_watch_time || 0) / 60)}m</span>
-                                        <span style="font-size: 10px; color: #6366f1; background: rgba(99, 102, 241, 0.1); padding: 2px 4px; border-radius: 4px;">🔥 Hot</span>
                                     </div>
                                 </div>
                             </td>
@@ -858,7 +833,7 @@ async function loadMovies() {
                             <td>
                                 <div style="display: flex; gap: 8px;">
                                     <button onclick="showMovieAnalytics(${m.id})" class="btn-stat-mini">📊 ANALITIKA</button>
-                                    <button onclick="${m.id < 9000 ? `deleteMovie(${m.id})` : 'alert(\'Demo kinoni oʻchirib boʻlmaydi\')'}" class="btn-delete-mini">🗑</button>
+                                    <button onclick="deleteMovie(${m.id})" class="btn-delete-mini">🗑</button>
                                 </div>
                             </td>
                         </tr>
@@ -903,26 +878,7 @@ async function showMovieAnalytics(id) {
         document.getElementById('movie-detail-shares').textContent = formatNumber(data.shares_count || 0);
 
         const minutes = Math.floor((data.total_watch_time || 0) / 60);
-        document.getElementById('movie-detail-watchtime').textContent = (minutes || random(100, 5000)) + 'm';
-
-        // Mock more details for "Namuna" if stats are zero
-        if (data.views_count === 0 || !data.analytics.countries.length) {
-            data.analytics.countries = [
-                { country: 'O\'zbekiston', count: random(500, 2000) },
-                { country: 'Rossiya', count: random(100, 500) },
-                { country: 'Qozog\'iston', count: random(50, 200) },
-                { country: 'Turkiya', count: random(20, 100) }
-            ];
-            data.analytics.ages = [
-                { age_group: '18-25', count: random(400, 1500) },
-                { age_group: '26-35', count: random(300, 800) },
-                { age_group: '18-', count: random(200, 600) },
-                { age_group: '35+', count: random(50, 200) }
-            ];
-            document.getElementById('movie-detail-views').textContent = formatNumber(random(1000, 10000));
-            document.getElementById('movie-detail-likes').textContent = `${random(500, 2000)} / ${random(10, 50)}`;
-            document.getElementById('movie-detail-shares').textContent = formatNumber(random(100, 500));
-        }
+        document.getElementById('movie-detail-watchtime').textContent = minutes + 'm';
 
         // Countries list
         const maxCountry = Math.max(...data.analytics.countries.map(c => c.count), 1);
@@ -1100,6 +1056,10 @@ async function loadGenres() {
         `;
 
         document.getElementById('genres-analytics').innerHTML = analyticsHtml;
+    } catch (err) {
+        console.error(err);
+    }
+}
 
 async function handleAddGenre(e) {
     e.preventDefault();
@@ -1579,6 +1539,12 @@ async function loadBroadcasts() {
 function exportToExcel(data) {
     const filters = `Tarif: ${data.tariff}, Oy: ${data.month}, Yil: ${data.year}`;
 
+    const payme = data.paymentMethods?.payme || 0;
+    const click = data.paymentMethods?.click || 0;
+    const methodsTotal = payme + click;
+    const paymePct = methodsTotal > 0 ? Math.round((payme / methodsTotal) * 100) : 0;
+    const clickPct = methodsTotal > 0 ? 100 - paymePct : 0;
+
     const csvContent = `PREMIUM ANALITIKA HISOBOTI\n` +
         `Sana: ${new Date().toLocaleString()}\n` +
         `Filtrlar: ${filters}\n\n` +
@@ -1593,8 +1559,8 @@ function exportToExcel(data) {
         `O'SISH/PASAYISH,,"${data.growth}%"\n` +
         `PROGNOZ (KELGUSI OY),,"${formatNumber(data.forecast)} SO'M"\n\n` +
         `TO'LOV TIZIMLARI BO'YICHA:\n` +
-        `PAYME (62%),,"${formatNumber(Math.round(data.totalRevenue * 0.62))} SO'M"\n` +
-        `CLICK (38%),,"${formatNumber(Math.round(data.totalRevenue * 0.38))} SO'M"\n`;
+        `PAYME (${paymePct}%),,"${formatNumber(payme)} SO'M"\n` +
+        `CLICK (${clickPct}%),,"${formatNumber(click)} SO'M"\n`;
 
     // Handle UTF-8 for Excel (add BOM)
     const blob = new Blob(["\ufeff" + csvContent], { type: 'text/csv;charset=utf-8;' });

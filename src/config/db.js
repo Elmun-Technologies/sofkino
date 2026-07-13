@@ -4,7 +4,7 @@ const fs = require('fs');
 
 // Persist the DB on the Fly.io volume (mounted at /data) so users/coins/streaks
 // survive redeploys. Locally (no /data) fall back to the repo path.
-// DB_PATH env var overrides everything.
+// DB_PATH env var overrides everything (the Dockerfile sets it in production).
 const dbPath = process.env.DB_PATH
     || (fs.existsSync('/data') ? path.join('/data', 'database.sqlite') : path.resolve(__dirname, '../../database.sqlite'));
 
@@ -73,6 +73,12 @@ const initDb = () => {
             FOREIGN KEY (genre_id) REFERENCES genres(id)
         )
     `);
+
+    // Migrations for movies captured from the storage channel
+    try { db.exec("ALTER TABLE movies ADD COLUMN status TEXT DEFAULT 'published'"); } catch (e) { }
+    try { db.exec('ALTER TABLE movies ADD COLUMN source_channel_id TEXT'); } catch (e) { }
+    try { db.exec('ALTER TABLE movies ADD COLUMN source_message_id INTEGER'); } catch (e) { }
+    try { db.exec('ALTER TABLE movies ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP'); } catch (e) { }
 
     // Movie Likes
     db.exec(`

@@ -12,7 +12,8 @@ Telegram orqali kinolarni boshqarish, ulashish va ko'rish uchun to'liq funksiona
 - 📰 **Yangiliklar** - Botdagi yangi kinolar haqida xabardor bo'lish
 
 ### 🔐 Admin uchun:
-- ➕ **Kino va janr qo'shish** - Wizard orqali oson qo'shish
+- ➕ **Kino qo'shish** - Videoni saqlash kanaliga yuborish, so'ng admin panelda kod/nom/tavsif to'ldirish
+- ➕ **Janr qo'shish** - Wizard orqali oson qo'shish
 - 📊 **Statistika** - Foydalanuvchilar va ko'rishlar soni
 - 👥 **Foydalanuvchilar ro'yxati** - Oxirgi ro'yxatdan o'tganlar
 - 📤 **Massoviy xabar yuborish** - Barchaga, faqat Premium yoki oddiy userlarga
@@ -35,10 +36,16 @@ npm install
 ```env
 BOT_TOKEN=sizning_bot_tokeningiz
 ADMIN_ID=sizning_telegram_id
+STORAGE_CHANNEL_ID=kinolar_saqlanadigan_private_kanal_id
 ```
 
 **ADMIN_ID ni qanday topish mumkin?**
 - `@userinfobot` ga `/start` yuboring, sizning ID'ingizni ko'rsatadi
+
+**STORAGE_CHANNEL_ID ni qanday topish mumkin?**
+- Bot'ni private kanalga administrator qilib qo'shing
+- `STORAGE_CHANNEL_ID`ni hali sozlamasdan botni ishga tushiring va kanalga istalgan xabar yuboring
+- Bot loglarida `STORAGE CHANNEL ID: -100...` qatorini toping va shu qiymatni `.env`ga yozing
 
 ### 4. Botni ishga tushirish
 ```bash
@@ -70,7 +77,6 @@ telegram-kino-bot/
 │   │   └── Movie.js           # Kino boshqaruvi
 │   ├── scenes/
 │   │   ├── addGenreScene.js   # Janr qo'shish wizard
-│   │   ├── addMovieScene.js   # Kino qo'shish wizard
 │   │   └── broadcastScene.js  # Xabar yuborish wizard
 │   ├── utils/
 │   │   └── auth.js            # Admin middleware
@@ -87,12 +93,9 @@ telegram-kino-bot/
 1. `/admin` buyrug'ini yuboring
 2. Janr qo'shing (masalan: "Komediya", "Drama")
 3. Kino qo'shing:
-   - Nomi
-   - Tavsif
-   - Janr tanlang
-   - Video fayl yuboring
-   - Kod kiriting (masalan: "101")
-   - Premium yoki yo'qligini belgilang
+   - Video faylni `STORAGE_CHANNEL_ID` kanaliga yuboring (bot shu yerdan avtomatik oladi)
+   - Admin panelda "⏳ Kutilayotgan videolar" ro'yxatida paydo bo'lgan videoni toping
+   - "✅ Nashr qilish" tugmasi orqali nomi, tavsifi, janri va kodini kiriting
 
 ### Oddiy foydalanuvchi:
 1. `/start` - Botni boshlash
