@@ -37,6 +37,11 @@ const initDb = () => {
         )
     `);
 
+    // "city" doubles as the user's viloyat/hudud, picked from a fixed list in
+    // the profile edit scene (not free text) so it's filterable in the admin
+    // panel. is_banned backs the admin panel's ban/unban action.
+    try { db.exec('ALTER TABLE users ADD COLUMN is_banned INTEGER DEFAULT 0'); } catch (e) { }
+
     // Genres table
     db.exec(`
         CREATE TABLE IF NOT EXISTS genres (
@@ -79,6 +84,8 @@ const initDb = () => {
     try { db.exec('ALTER TABLE movies ADD COLUMN source_channel_id TEXT'); } catch (e) { }
     try { db.exec('ALTER TABLE movies ADD COLUMN source_message_id INTEGER'); } catch (e) { }
     try { db.exec('ALTER TABLE movies ADD COLUMN created_at DATETIME DEFAULT CURRENT_TIMESTAMP'); } catch (e) { }
+    // Raw channel post caption, kept so title/genre/description can be re-parsed later if needed
+    try { db.exec('ALTER TABLE movies ADD COLUMN source_caption TEXT'); } catch (e) { }
 
     // Movie Likes
     db.exec(`
@@ -241,6 +248,9 @@ const initDb = () => {
             FOREIGN KEY (user_id) REFERENCES users(telegram_id)
         )
     `);
+
+    // Screenshot the user sent as proof of a manual bank transfer
+    try { db.exec('ALTER TABLE payments ADD COLUMN screenshot_file_id TEXT'); } catch (e) { }
 
     console.log('Database initialized.');
 };

@@ -2,6 +2,7 @@ const { Markup } = require('telegraf');
 const User = require('../models/User');
 const { db } = require('../config/db');
 const { getPaymentInfo } = require('../config/payment');
+const { getAdminIds } = require('../config/admins');
 
 function escapeHtml(str) {
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -13,6 +14,9 @@ const PLAN_MAP = {
     '6m': { days: 180, price: 79900, label: '6 oy' },
     'lifetime': { days: 36500, price: 129900, label: 'Umrbod' } // 100 years ≈ lifetime
 };
+
+// userId -> plan key, while we're waiting for their payment screenshot
+const waitingForScreenshot = {};
 
 const premiumController = {
     async showPlans(ctx) {
@@ -75,9 +79,9 @@ To'lov uchun quyidagi tugmalardan birini tanlang:
 Quyidagi kartaga <b>${selectedPlan.price.toLocaleString('ru-RU')} so'm</b> summasini o'tkazing:
 ${cardText}
 
-✅ To'lov qilganingizni tasdiqlash uchun pastdagi tugmani bosing — admin tekshirib, Premiumni faollashtiradi.
+📸 To'lovni amalga oshirgach, <b>chek skrinshotini shu chatga rasm sifatida yuboring</b> — admin tekshirib, Premiumni faollashtiradi.
 
-❗️ Savol yoki muammo bo'lsa, admin bilan bog'laning: @admin_username
+❗️ Savol yoki muammo bo'lsa, admin bilan bog'laning: @sofkino_support
             `.trim();
 
             await ctx.editMessageText(paymentInfo, {
@@ -95,28 +99,57 @@ ${cardText}
         }
     },
 
-    // User claims they paid manually — logs a pending payment and asks the admin to confirm.
-    async confirmPayment(ctx, plan) {
+    // Step 1: user says they paid — ask for the screenshot instead of trusting the click.
+    async requestScreenshot(ctx, plan) {
         try {
             const selectedPlan = PLAN_MAP[plan];
             if (!selectedPlan) {
                 return ctx.answerCbQuery('❌ Noto\'g\'ri tarif');
             }
 
+            waitingForScreenshot[ctx.from.id] = plan;
+
+            await ctx.editMessageText(
+                `📸 <b>To'lov chekini yuboring</b>\n\nKartaga <b>${selectedPlan.price.toLocaleString('ru-RU')} so'm</b> o'tkazgan bo'lsangiz, endi shu chatga chek skrinshotini rasm sifatida yuboring.`,
+                {
+                    parse_mode: 'HTML',
+                    ...Markup.inlineKeyboard([[Markup.button.callback('⬅️ Orqaga', 'premium_plans')]])
+                }
+            );
+        } catch (err) {
+            console.error('requestScreenshot error:', err);
+        }
+    },
+
+    isAwaitingScreenshot(userId) {
+        return !!waitingForScreenshot[userId];
+    },
+
+    // Step 2: the screenshot photo arrives — log the pending payment and forward
+    // the actual screenshot to the admin so they can verify it before approving.
+    async handleScreenshot(ctx) {
+        const plan = waitingForScreenshot[ctx.from.id];
+        delete waitingForScreenshot[ctx.from.id];
+
+        const selectedPlan = PLAN_MAP[plan];
+        if (!selectedPlan) return;
+
+        try {
+            const photos = ctx.message.photo;
+            const fileId = photos[photos.length - 1].file_id;
+
             const transactionId = `manual_${ctx.from.id}_${Date.now()}`;
             const result = db.prepare(`
-                INSERT INTO payments (user_id, amount, payment_method, transaction_id, subscription_type, status)
-                VALUES (?, ?, 'manual', ?, ?, 'pending')
-            `).run(ctx.from.id, selectedPlan.price, transactionId, plan);
+                INSERT INTO payments (user_id, amount, payment_method, transaction_id, subscription_type, status, screenshot_file_id)
+                VALUES (?, ?, 'manual', ?, ?, 'pending', ?)
+            `).run(ctx.from.id, selectedPlan.price, transactionId, plan, fileId);
 
-            await ctx.editMessageText('✅ So\'rovingiz qabul qilindi!\n\n⏳ Admin to\'lovni tekshirib, tez orada Premiumni faollashtiradi.', {
-                parse_mode: 'HTML'
-            });
+            await ctx.reply('✅ Chek qabul qilindi!\n\n⏳ Admin tekshirib, tez orada Premiumni faollashtiradi.');
 
-            const adminId = process.env.ADMIN_ID;
-            if (adminId) {
-                const paymentId = result.lastInsertRowid;
-                await ctx.telegram.sendMessage(adminId, `💳 <b>Yangi to'lov so'rovi</b>\n\n👤 @${escapeHtml(ctx.from.username || 'yo\'q')} (ID: ${ctx.from.id})\n📦 Tarif: ${selectedPlan.label}\n💰 Narx: ${selectedPlan.price.toLocaleString('ru-RU')} so'm`, {
+            const paymentId = result.lastInsertRowid;
+            for (const adminId of getAdminIds()) {
+                await ctx.telegram.sendPhoto(adminId, fileId, {
+                    caption: `💳 <b>Yangi to'lov so'rovi</b>\n\n👤 @${escapeHtml(ctx.from.username || 'yo\'q')} (ID: ${ctx.from.id})\n📦 Tarif: ${selectedPlan.label}\n💰 Narx: ${selectedPlan.price.toLocaleString('ru-RU')} so'm`,
                     parse_mode: 'HTML',
                     ...Markup.inlineKeyboard([
                         [
@@ -124,10 +157,10 @@ ${cardText}
                             Markup.button.callback('❌ Rad etish', `pay_reject_${paymentId}`)
                         ]
                     ])
-                }).catch(() => { });
+                }).catch(err => console.error(`Failed to notify admin ${adminId} of payment:`, err.message));
             }
         } catch (err) {
-            console.error('confirmPayment error:', err);
+            console.error('handleScreenshot error:', err);
             try {
                 await ctx.reply('❌ Xatolik yuz berdi. Birozdan keyin qayta urinib ko\'ring.');
             } catch (e) { }
@@ -145,7 +178,9 @@ ${cardText}
         User.setPremium(payment.user_id, plan ? plan.days : 30);
 
         await ctx.answerCbQuery('✅ Tasdiqlandi');
-        await ctx.editMessageText(`✅ To'lov #${paymentId} tasdiqlandi. Premium faollashtirildi.`);
+        // The admin notification is a photo (the screenshot), so its caption -
+        // not its text - has to be edited.
+        await ctx.editMessageCaption(`✅ To'lov #${paymentId} tasdiqlandi. Premium faollashtirildi.`).catch(() => { });
         await ctx.telegram.sendMessage(payment.user_id, `🎉 To'lovingiz tasdiqlandi! Premium obuna faollashtirildi.`).catch(() => { });
     },
 
@@ -158,8 +193,8 @@ ${cardText}
         db.prepare(`UPDATE payments SET status = 'rejected' WHERE id = ?`).run(paymentId);
 
         await ctx.answerCbQuery('❌ Rad etildi');
-        await ctx.editMessageText(`❌ To'lov #${paymentId} rad etildi.`);
-        await ctx.telegram.sendMessage(payment.user_id, `❌ To'lovingiz tasdiqlanmadi. Admin bilan bog'laning: @admin_username`).catch(() => { });
+        await ctx.editMessageCaption(`❌ To'lov #${paymentId} rad etildi.`).catch(() => { });
+        await ctx.telegram.sendMessage(payment.user_id, `❌ To'lovingiz tasdiqlanmadi. Admin bilan bog'laning: @sofkino_support`).catch(() => { });
     }
 };
 

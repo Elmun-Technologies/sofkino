@@ -7,6 +7,7 @@ const { isAdmin } = require('./utils/auth');
 const User = require('./models/User');
 const checkSubscription = require('./utils/subscriptionMiddleware');
 const { captureReferral, rewardReferralIfPending } = require('./utils/referralReward');
+const { getAdminIds } = require('./config/admins');
 
 // Controllers
 const movieController = require('./controllers/movieController');
@@ -64,6 +65,9 @@ bot.use(async (ctx, next) => {
             `).run(ctx.from.id, ctx.from.username || null, ctx.from.first_name);
         } else {
             User.createOrUpdate(ctx.from.id, ctx.from.username, ctx.from.first_name);
+            if (user.is_banned) {
+                return ctx.reply('🚫 Siz botdan foydalanish huquqidan mahrum qilingansiz.').catch(() => { });
+            }
         }
 
         // Daily login streak (awarded at most once per local day)
@@ -86,7 +90,7 @@ bot.use(async (ctx, next) => {
 bot.use(checkSubscription);
 
 // Movie ingestion from the storage channel
-bot.on('channel_post', (ctx, next) => {
+bot.on('channel_post', async (ctx, next) => {
     const post = ctx.channelPost;
     const storageChannelId = process.env.STORAGE_CHANNEL_ID;
     const chatIdMatches = !!storageChannelId && String(post.chat.id) === String(storageChannelId);
@@ -108,7 +112,8 @@ bot.on('channel_post', (ctx, next) => {
             hasDocument: !!post.document,
             fileId: file?.file_id,
             fileSize: file?.file_size,
-            mimeType: file?.mime_type
+            mimeType: file?.mime_type,
+            hasCaption: !!post.caption
         });
 
         if (file) {
@@ -116,13 +121,35 @@ bot.on('channel_post', (ctx, next) => {
                 const result = Movie.createPending({
                     fileId: file.file_id,
                     sourceChannelId: post.chat.id,
-                    sourceMessageId: post.message_id
+                    sourceMessageId: post.message_id,
+                    caption: post.caption
                 });
                 console.log('[channel_post] createPending result', {
                     messageId: post.message_id,
                     changes: result?.changes,
-                    insertedId: result?.lastInsertRowid
+                    insertedId: result?.lastInsertRowid,
+                    parsedTitle: result?.title
                 });
+
+                // Let every admin publish straight from the bot - no computer or
+                // admin panel needed. Everything (title/genre/description) was
+                // already parsed from the caption above; this just assigns a code.
+                // Whichever admin taps the button first publishes it (the others'
+                // button then just says "already published").
+                if (result?.lastInsertRowid) {
+                    const id = result.lastInsertRowid;
+                    const title = result.title || '⏳ Nomi aniqlanmadi';
+                    const genreNote = result.genreId ? '' : '\n⚠️ Janr avtomatik aniqlanmadi (admin panelda tuzatish mumkin).';
+                    for (const adminId of getAdminIds()) {
+                        await ctx.telegram.sendMessage(adminId,
+                            `🎬 <b>Yangi video keldi</b>\n\n${title}${genreNote}\n\nNashr qilishga tayyor - kod avtomatik biriktiriladi.`,
+                            {
+                                parse_mode: 'HTML',
+                                ...Markup.inlineKeyboard([[Markup.button.callback('✅ Nashr qilish', `movie_publish_auto_${id}`)]])
+                            }
+                        ).catch(err => console.error(`[channel_post] Failed to notify admin ${adminId}:`, err.message));
+                    }
+                }
             } catch (err) {
                 console.error('[channel_post] Failed to save pending movie:', err);
             }
@@ -134,6 +161,22 @@ bot.on('channel_post', (ctx, next) => {
     }
 
     return next();
+});
+
+// One-click publish from the bot itself - for admins without a computer handy.
+bot.action(/^movie_publish_auto_(\d+)$/, isAdmin, async (ctx) => {
+    const id = parseInt(ctx.match[1]);
+    const result = Movie.publishAuto(id);
+
+    if (!result) {
+        return ctx.answerCbQuery('Bu video allaqachon nashr qilingan yoki topilmadi');
+    }
+
+    await ctx.answerCbQuery('✅ Nashr qilindi');
+    await ctx.editMessageText(
+        `✅ <b>${result.title}</b> nashr qilindi!\n\n🔑 Kod: <code>${result.accessCode}</code>\n${result.genreName ? `🎭 Janr: ${result.genreName}` : '⚠️ Janr tayinlanmagan - admin panelda tahrirlang.'}`,
+        { parse_mode: 'HTML' }
+    );
 });
 
 bot.action('check_sub', async (ctx) => {
@@ -275,11 +318,19 @@ bot.action(/^premium_(.+)$/, (ctx) => {
 
 bot.action(/^payment_confirm_(.+)$/, (ctx) => {
     ctx.answerCbQuery();
-    return premiumController.confirmPayment(ctx, ctx.match[1]);
+    return premiumController.requestScreenshot(ctx, ctx.match[1]);
 });
 
 bot.action(/^pay_approve_(\d+)$/, isAdmin, (ctx) => premiumController.approvePayment(ctx, parseInt(ctx.match[1])));
 bot.action(/^pay_reject_(\d+)$/, isAdmin, (ctx) => premiumController.rejectPayment(ctx, parseInt(ctx.match[1])));
+
+// Handle the payment screenshot the user sends after transferring
+bot.on('photo', (ctx, next) => {
+    if (premiumController.isAwaitingScreenshot(ctx.from.id)) {
+        return premiumController.handleScreenshot(ctx);
+    }
+    return next();
+});
 
 // User Commands - Code Input
 let waitingForCode = {};
@@ -310,7 +361,7 @@ bot.hears('📞 Yordam', (ctx) => {
 - Premium obunachilarga maxsus kinolar va reklamasiz ko'rish imkoniyati beriladi.
 
 📧 Muammo yuzaga keldimi?
-Admin bilan bog'lanish: @admin_username`, { parse_mode: 'Markdown' });
+Admin bilan bog'lanish: @sofkino_support`, { parse_mode: 'Markdown' });
 });
 
 // News

@@ -182,15 +182,45 @@ async function loadPendingMovies() {
             return;
         }
 
-        listEl.innerHTML = pending.map(p => `
+        listEl.innerHTML = pending.map(p => {
+            const hasTitle = p.title && p.title !== '⏳ Kutilmoqda';
+            return `
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #0f1429; border: 1px solid #1e2542; border-radius: 10px; margin-bottom: 10px;">
-                <span style="color: #8b92b0;">🎞️ Yangi video keldi, vaqti: ${p.created_at || 'N/A'}</span>
-                <button onclick="openPublishModal(${p.id})" class="btn-primary" style="margin: 0; padding: 8px 16px;">✅ Nashr qilish</button>
+                <div>
+                    <div style="font-weight: 600;">${hasTitle ? p.title : '🎞️ Nomi aniqlanmadi'}</div>
+                    <small style="color: #8b92b0;">${p.genre_name ? '🎭 ' + p.genre_name : '⚠️ Janr aniqlanmadi'} · ${p.created_at || ''}</small>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button onclick="publishAuto(${p.id})" class="btn-primary" style="margin: 0; padding: 8px 16px;">✅ Nashr qilish</button>
+                    <button onclick="openPublishModal(${p.id})" title="Qo'lda tahrirlash" style="background: rgba(102, 126, 234, 0.1); color: #667eea; border: 1px solid rgba(102, 126, 234, 0.2); padding: 8px 12px; border-radius: 6px; cursor: pointer;">✏️</button>
+                </div>
             </div>
-        `).join('');
+        `;
+        }).join('');
     } catch (err) {
         console.error('loadPendingMovies error:', err);
         listEl.innerHTML = `<p style="color: #ef4444;">Xatolik: ${err.message}</p>`;
+    }
+}
+
+// One-click publish: uses the title/genre/description already parsed from
+// the channel caption, backend just assigns a fresh access code.
+async function publishAuto(id) {
+    try {
+        const res = await fetch(`${API_URL}/movies/${id}/publish-auto`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const result = await res.json();
+        if (result.success) {
+            alert(`✅ "${result.title}" nashr qilindi!\nKod: ${result.accessCode}`);
+            loadMovies();
+        } else {
+            alert('Xatolik: ' + (result.error || 'Noma\'lum xato'));
+        }
+    } catch (err) {
+        console.error('publishAuto error:', err);
+        alert('Xatolik yuz berdi: ' + err.message);
     }
 }
 
@@ -959,6 +989,7 @@ async function loadUsers(filters = {}) {
                         <th>TELEGRAM ID</th>
                         <th>ISM</th>
                         <th>USERNAME</th>
+                        <th>HUDUD</th>
                         <th>QO'SHILGAN</th>
                         <th>PREMIUM</th>
                         <th>AMALLAR</th>
@@ -968,12 +999,16 @@ async function loadUsers(filters = {}) {
                     ${users.map(u => `
                         <tr>
                             <td><code>${u.telegram_id}</code></td>
-                            <td><strong>${u.full_name || 'N/A'}</strong></td>
+                            <td><strong>${u.full_name || 'N/A'}</strong>${u.is_banned ? ' <span style="color: #ef4444; font-size: 11px;">(BAN)</span>' : ''}</td>
                             <td>@${u.username || 'N/A'}</td>
+                            <td>${u.city || '-'}</td>
                             <td>${new Date(u.joined_at).toLocaleDateString()}</td>
                             <td>${u.is_premium ? '<span style="color: #10b981;">✅ Premium</span>' : '<span style="color: #8b92b0;">❌</span>'}</td>
                             <td>
-                                <button style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer;">Ban</button>
+                                ${u.is_banned
+                            ? `<button onclick="unbanUser(${u.telegram_id})" style="background: rgba(16, 185, 129, 0.1); color: #10b981; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer;">Unban</button>`
+                            : `<button onclick="banUser(${u.telegram_id})" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: none; padding: 6px 12px; border-radius: 6px; cursor: pointer;">Ban</button>`
+                        }
                             </td>
                         </tr>
                     `).join('')}
@@ -984,6 +1019,31 @@ async function loadUsers(filters = {}) {
         document.getElementById('users-list').innerHTML = html;
     } catch (err) {
         console.error(err);
+    }
+}
+
+async function banUser(id) {
+    if (!confirm('Bu foydalanuvchini ban qilishga ishonchingiz komilmi?')) return;
+    try {
+        await fetch(`${API_URL}/users/${id}/ban`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        loadUsers();
+    } catch (err) {
+        alert('Xatolik yuz berdi: ' + err.message);
+    }
+}
+
+async function unbanUser(id) {
+    try {
+        await fetch(`${API_URL}/users/${id}/unban`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        loadUsers();
+    } catch (err) {
+        alert('Xatolik yuz berdi: ' + err.message);
     }
 }
 
