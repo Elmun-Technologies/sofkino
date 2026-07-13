@@ -353,7 +353,7 @@ bot.on('document', (ctx, next) => {
 // User Commands - Code Input
 let waitingForCode = {};
 
-bot.hears('🔑 Kino kodini kiriting', (ctx) => {
+bot.hears('🔑 KINO KODINI KIRITISH', (ctx) => {
     waitingForCode[ctx.from.id] = true;
     ctx.reply('🔑 Kino kodini kiriting:\n\nMasalan: 101, 777, ABC123');
 });
@@ -376,7 +376,7 @@ bot.hears('📞 Yordam', (ctx) => {
 
 ❓ Kino qanday topiladi?
 - Janrlar orqali: 🎬 Kinolar → Janrni tanlang
-- Kod orqali: 🔑 Kino kodini kiriting → Kodni kiriting
+- Kod orqali: 🔑 KINO KODINI KIRITISH → Kodni kiriting
 
 💎 Premium nima?
 - Premium obunachilarga maxsus kinolar va reklamasiz ko'rish imkoniyati beriladi.
