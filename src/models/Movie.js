@@ -14,7 +14,7 @@ class Movie {
     // Picks one random movie, optionally excluding ids (e.g. already seen today)
     // and premium-only titles (default excluded — used for the free daily pick).
     static getRandom({ excludeIds = [], includePremium = false } = {}) {
-        const conditions = [];
+        const conditions = ["status = 'published'"];
         const params = [];
 
         if (!includePremium) {
