@@ -358,7 +358,7 @@ bot.hears('📞 Yordam', (ctx) => {
 - Premium obunachilarga maxsus kinolar va reklamasiz ko'rish imkoniyati beriladi.
 
 📧 Muammo yuzaga keldimi?
-Admin bilan bog'lanish: @admin_username`, { parse_mode: 'Markdown' });
+Admin bilan bog'lanish: @sofkino_support`, { parse_mode: 'Markdown' });
 });
 
 // News

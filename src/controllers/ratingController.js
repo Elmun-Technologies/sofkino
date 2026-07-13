@@ -25,11 +25,12 @@ const ratingController = {
         if (period === 'week') {
             const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
             const stmt = db.prepare(`
-                SELECT m.*, COUNT(mv.id) as recent_views 
+                SELECT m.*, COUNT(mv.id) as recent_views
                 FROM movies m
                 LEFT JOIN movie_views mv ON m.id = mv.movie_id AND mv.viewed_at > ?
-                WHERE m.rating > 0
+                WHERE m.status = 'published'
                 GROUP BY m.id
+                HAVING m.rating > 0 OR recent_views > 0
                 ORDER BY m.rating DESC, recent_views DESC
                 LIMIT 10
             `);
@@ -38,11 +39,12 @@ const ratingController = {
         } else if (period === 'month') {
             const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
             const stmt = db.prepare(`
-                SELECT m.*, COUNT(mv.id) as recent_views 
+                SELECT m.*, COUNT(mv.id) as recent_views
                 FROM movies m
                 LEFT JOIN movie_views mv ON m.id = mv.movie_id AND mv.viewed_at > ?
-                WHERE m.rating > 0
+                WHERE m.status = 'published'
                 GROUP BY m.id
+                HAVING m.rating > 0 OR recent_views > 0
                 ORDER BY m.rating DESC, recent_views DESC
                 LIMIT 10
             `);
@@ -51,11 +53,12 @@ const ratingController = {
         } else if (period === 'year') {
             const oneYearAgo = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
             const stmt = db.prepare(`
-                SELECT m.*, COUNT(mv.id) as recent_views 
+                SELECT m.*, COUNT(mv.id) as recent_views
                 FROM movies m
                 LEFT JOIN movie_views mv ON m.id = mv.movie_id AND mv.viewed_at > ?
-                WHERE m.rating > 0
+                WHERE m.status = 'published'
                 GROUP BY m.id
+                HAVING m.rating > 0 OR recent_views > 0
                 ORDER BY m.rating DESC, recent_views DESC
                 LIMIT 10
             `);
@@ -71,9 +74,11 @@ const ratingController = {
 
         const buttons = [];
         movies.forEach((movie, index) => {
-            const stars = '⭐'.repeat(Math.round(movie.rating / 2));
-            message += `${index + 1}. 🎬 ${movie.title}\n   ${stars} ${movie.rating}/10\n   👁 ${movie.views_count} ko\'rilgan\n\n`;
-            buttons.push([Markup.button.callback(`${index + 1}. ${movie.title} (${movie.rating}/10)`, `movie_${movie.id}`)]);
+            const ratingLine = movie.rating > 0
+                ? `   ${'⭐'.repeat(Math.round(movie.rating / 2))} ${movie.rating}/10\n`
+                : '';
+            message += `${index + 1}. 🎬 ${movie.title}\n${ratingLine}   👁 ${movie.views_count} ko\'rilgan\n\n`;
+            buttons.push([Markup.button.callback(`${index + 1}. ${movie.title}${movie.rating > 0 ? ` (${movie.rating}/10)` : ''}`, `movie_${movie.id}`)]);
         });
 
         buttons.push([Markup.button.callback('⬅️ Orqaga', 'back_to_rating_menu')]);

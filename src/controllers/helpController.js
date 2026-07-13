@@ -16,7 +16,7 @@ const helpController = {
     },
 
     async showPaymentHelp(ctx) {
-        const paymentGuide = `💳 <b>To'lov bo'yicha Yordam</b>\n\n<b>To'lov qilish:</b>\n1. Premium bo'limiga o'ting\n2. Tarif tanlang\n3. Karta raqamiga to'lov qiling\n4. Chekni adminga yuboring\n\n<b>To'lov masalalari:</b>\nAgar to'lash bilan muammo bo'lsa, tiket yarating yoki to'g'ridan-to'g'ri admin bilan bog'laning: @admin_username`;
+        const paymentGuide = `💳 <b>To'lov bo'yicha Yordam</b>\n\n<b>To'lov qilish:</b>\n1. Premium bo'limiga o'ting\n2. Tarif tanlang\n3. Karta raqamiga to'lov qiling\n4. Chekni adminga yuboring\n\n<b>To'lov masalalari:</b>\nAgar to'lash bilan muammo bo'lsa, tiket yarating yoki to'g'ridan-to'g'ri admin bilan bog'laning: @sofkino_support`;
 
         await ctx.reply(paymentGuide, {
             parse_mode: 'HTML',

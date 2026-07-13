@@ -81,7 +81,7 @@ ${cardText}
 
 📸 To'lovni amalga oshirgach, <b>chek skrinshotini shu chatga rasm sifatida yuboring</b> — admin tekshirib, Premiumni faollashtiradi.
 
-❗️ Savol yoki muammo bo'lsa, admin bilan bog'laning: @admin_username
+❗️ Savol yoki muammo bo'lsa, admin bilan bog'laning: @sofkino_support
             `.trim();
 
             await ctx.editMessageText(paymentInfo, {
@@ -194,7 +194,7 @@ ${cardText}
 
         await ctx.answerCbQuery('❌ Rad etildi');
         await ctx.editMessageCaption(`❌ To'lov #${paymentId} rad etildi.`).catch(() => { });
-        await ctx.telegram.sendMessage(payment.user_id, `❌ To'lovingiz tasdiqlanmadi. Admin bilan bog'laning: @admin_username`).catch(() => { });
+        await ctx.telegram.sendMessage(payment.user_id, `❌ To'lovingiz tasdiqlanmadi. Admin bilan bog'laning: @sofkino_support`).catch(() => { });
     }
 };
 
