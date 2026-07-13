@@ -35,12 +35,14 @@ npm install
 `.env` faylini oching va quyidagilarni kiriting:
 ```env
 BOT_TOKEN=sizning_bot_tokeningiz
-ADMIN_ID=sizning_telegram_id
+ADMIN_IDS=birinchi_admin_id,ikkinchi_admin_id
 STORAGE_CHANNEL_ID=kinolar_saqlanadigan_private_kanal_id
 ```
 
-**ADMIN_ID ni qanday topish mumkin?**
-- `@userinfobot` ga `/start` yuboring, sizning ID'ingizni ko'rsatadi
+**ADMIN_IDS ni qanday topish mumkin?**
+- Har bir admin `@userinfobot` ga `/start` yuborsin, bot ularning ID'ini ko'rsatadi
+- Bir nechta admin bo'lsa, ID'larni vergul bilan ajratib yozing: `ADMIN_IDS=7401982767,6241083439`
+- Faqat bitta admin bo'lsa, eski `ADMIN_ID=sizning_telegram_id` ham ishlayveradi
 
 **STORAGE_CHANNEL_ID ni qanday topish mumkin?**
 - Bot'ni private kanalga administrator qilib qo'shing
@@ -139,7 +141,7 @@ telegram-kino-bot/
 ## 🔒 Xavfsizlik
 
 - `.env` fayl gitignore qilingan
-- Adminni faqat ADMIN_ID orqali aniqlash
+- Adminni faqat ADMIN_IDS (yoki ADMIN_ID) orqali aniqlash
 - Database faqat server-side
 
 ## 📝 Keyingi bosqichlar

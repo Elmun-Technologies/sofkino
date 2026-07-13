@@ -1,6 +1,7 @@
 const Channel = require('../models/Channel');
 const { Markup } = require('telegraf');
 const { rewardReferralIfPending } = require('./referralReward');
+const { isAdminId } = require('../config/admins');
 
 const checkSubscription = async (ctx, next) => {
     // Skip if it's a callback query for 'check_sub' to avoid recursion
@@ -14,8 +15,7 @@ const checkSubscription = async (ctx, next) => {
     }
 
     // Skip for admins
-    const adminId = parseInt(process.env.ADMIN_ID);
-    if (ctx.from && ctx.from.id === adminId) {
+    if (isAdminId(ctx.from.id)) {
         return next();
     }
 

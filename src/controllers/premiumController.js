@@ -2,6 +2,7 @@ const { Markup } = require('telegraf');
 const User = require('../models/User');
 const { db } = require('../config/db');
 const { getPaymentInfo } = require('../config/payment');
+const { getAdminIds } = require('../config/admins');
 
 function escapeHtml(str) {
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -145,9 +146,8 @@ ${cardText}
 
             await ctx.reply('✅ Chek qabul qilindi!\n\n⏳ Admin tekshirib, tez orada Premiumni faollashtiradi.');
 
-            const adminId = process.env.ADMIN_ID;
-            if (adminId) {
-                const paymentId = result.lastInsertRowid;
+            const paymentId = result.lastInsertRowid;
+            for (const adminId of getAdminIds()) {
                 await ctx.telegram.sendPhoto(adminId, fileId, {
                     caption: `💳 <b>Yangi to'lov so'rovi</b>\n\n👤 @${escapeHtml(ctx.from.username || 'yo\'q')} (ID: ${ctx.from.id})\n📦 Tarif: ${selectedPlan.label}\n💰 Narx: ${selectedPlan.price.toLocaleString('ru-RU')} so'm`,
                     parse_mode: 'HTML',
@@ -157,7 +157,7 @@ ${cardText}
                             Markup.button.callback('❌ Rad etish', `pay_reject_${paymentId}`)
                         ]
                     ])
-                }).catch(err => console.error('Failed to notify admin of payment:', err.message));
+                }).catch(err => console.error(`Failed to notify admin ${adminId} of payment:`, err.message));
             }
         } catch (err) {
             console.error('handleScreenshot error:', err);

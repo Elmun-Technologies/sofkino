@@ -7,6 +7,7 @@ const { isAdmin } = require('./utils/auth');
 const User = require('./models/User');
 const checkSubscription = require('./utils/subscriptionMiddleware');
 const { captureReferral, rewardReferralIfPending } = require('./utils/referralReward');
+const { getAdminIds } = require('./config/admins');
 
 // Controllers
 const movieController = require('./controllers/movieController');
@@ -127,21 +128,24 @@ bot.on('channel_post', async (ctx, next) => {
                     parsedTitle: result?.title
                 });
 
-                // Let the admin publish straight from the bot - no computer or
+                // Let every admin publish straight from the bot - no computer or
                 // admin panel needed. Everything (title/genre/description) was
                 // already parsed from the caption above; this just assigns a code.
-                const adminId = process.env.ADMIN_ID;
-                if (adminId && result?.lastInsertRowid) {
+                // Whichever admin taps the button first publishes it (the others'
+                // button then just says "already published").
+                if (result?.lastInsertRowid) {
                     const id = result.lastInsertRowid;
                     const title = result.title || '⏳ Nomi aniqlanmadi';
                     const genreNote = result.genreId ? '' : '\n⚠️ Janr avtomatik aniqlanmadi (admin panelda tuzatish mumkin).';
-                    await ctx.telegram.sendMessage(adminId,
-                        `🎬 <b>Yangi video keldi</b>\n\n${title}${genreNote}\n\nNashr qilishga tayyor - kod avtomatik biriktiriladi.`,
-                        {
-                            parse_mode: 'HTML',
-                            ...Markup.inlineKeyboard([[Markup.button.callback('✅ Nashr qilish', `movie_publish_auto_${id}`)]])
-                        }
-                    ).catch(err => console.error('[channel_post] Failed to notify admin:', err.message));
+                    for (const adminId of getAdminIds()) {
+                        await ctx.telegram.sendMessage(adminId,
+                            `🎬 <b>Yangi video keldi</b>\n\n${title}${genreNote}\n\nNashr qilishga tayyor - kod avtomatik biriktiriladi.`,
+                            {
+                                parse_mode: 'HTML',
+                                ...Markup.inlineKeyboard([[Markup.button.callback('✅ Nashr qilish', `movie_publish_auto_${id}`)]])
+                            }
+                        ).catch(err => console.error(`[channel_post] Failed to notify admin ${adminId}:`, err.message));
+                    }
                 }
             } catch (err) {
                 console.error('[channel_post] Failed to save pending movie:', err);
