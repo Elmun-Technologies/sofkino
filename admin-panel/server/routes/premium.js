@@ -3,6 +3,21 @@ const router = express.Router();
 const authMiddleware = require('../middleware/auth');
 const { db } = require('../server');
 
+// A confirmed payment is one an admin approved after reviewing the screenshot
+// the user sent (see src/controllers/premiumController.approvePayment).
+const APPROVED = 'approved';
+
+// The bot charges on plan keys ('1m','3m','6m','lifetime') and stores those in
+// subscription_type. The admin UI works in canonical names. Normalize so the
+// two line up (and any legacy rows map through too). `col` lets callers qualify
+// the column when the query aliases the payments table.
+const typeCase = (col = 'subscription_type') => `CASE ${col}
+    WHEN '1m' THEN 'monthly'
+    WHEN '3m' THEN 'quarterly'
+    WHEN '6m' THEN 'semi_annual'
+    WHEN 'lifetime' THEN 'lifetime'
+    ELSE ${col} END`;
+
 // Get premium analytics with date filtering
 router.get('/', authMiddleware, async (req, res) => {
     try {
@@ -27,16 +42,18 @@ router.get('/', authMiddleware, async (req, res) => {
             end = now;
         }
 
-        // Get payments for current period
+        // Get payments for current period. datetime() normalizes both the stored
+        // value (SQLite 'YYYY-MM-DD HH:MM:SS') and the ISO bounds so BETWEEN can't
+        // misfire on the 'T'-vs-space format difference at range boundaries.
         const currentPayments = await db.prepare(`
-            SELECT 
-                subscription_type,
+            SELECT
+                ${typeCase()} as subscription_type,
                 COUNT(*) as count,
                 SUM(amount) as revenue
             FROM payments
-            WHERE status = 'success' AND created_at BETWEEN ? AND ?
+            WHERE status = ? AND datetime(created_at) BETWEEN datetime(?) AND datetime(?)
             GROUP BY subscription_type
-        `).all([start.toISOString(), end.toISOString()]);
+        `).all([APPROVED, start.toISOString(), end.toISOString()]);
 
         // Previous period comparison
         const prevStart = new Date(start);
@@ -46,12 +63,12 @@ router.get('/', authMiddleware, async (req, res) => {
 
         const previousPayments = await db.prepare(`
             SELECT SUM(amount) as revenue FROM payments
-            WHERE status = 'success' AND created_at BETWEEN ? AND ?
-        `).get([prevStart.toISOString(), prevEnd.toISOString()]);
+            WHERE status = ? AND datetime(created_at) BETWEEN datetime(?) AND datetime(?)
+        `).get([APPROVED, prevStart.toISOString(), prevEnd.toISOString()]);
 
         const currentTotal = currentPayments.reduce((sum, p) => sum + (p.revenue || 0), 0);
         const previousTotal = previousPayments?.revenue || 0;
-        const growth = previousTotal > 0 ? ((currentTotal - previousTotal) / previousTotal * 100).toFixed(1) : 0;
+        const growth = previousTotal > 0 ? parseFloat(((currentTotal - previousTotal) / previousTotal * 100).toFixed(1)) : 0;
 
         // Forecast for next month (simple linear projection)
         const forecast = Math.round(currentTotal * (1 + growth / 100));
@@ -63,10 +80,10 @@ router.get('/', authMiddleware, async (req, res) => {
                 SUM(amount) as revenue,
                 COUNT(*) as transactions
             FROM payments
-            WHERE status = 'success' AND strftime('%Y', created_at) = ?
+            WHERE status = ? AND strftime('%Y', created_at) = ?
             GROUP BY month
             ORDER BY month
-        `).all([start.getFullYear().toString()]);
+        `).all([APPROVED, start.getFullYear().toString()]);
 
         res.json({
             currentPeriod: {
@@ -77,7 +94,7 @@ router.get('/', authMiddleware, async (req, res) => {
             },
             comparison: {
                 previousPeriod: previousTotal,
-                growth: parseFloat(growth)
+                growth
             },
             forecast: {
                 nextMonth: forecast,
@@ -100,12 +117,12 @@ router.get('/payment-methods', authMiddleware, async (req, res) => {
                 COUNT(*) as count,
                 SUM(amount) as revenue
             FROM payments
-            WHERE status = 'success'
+            WHERE status = ?
         `;
-        const params = [];
+        const params = [APPROVED];
 
         if (startDate && endDate) {
-            query += ` AND created_at BETWEEN ? AND ?`;
+            query += ` AND datetime(created_at) BETWEEN datetime(?) AND datetime(?)`;
             params.push(new Date(startDate).toISOString(), new Date(endDate).toISOString());
         }
 
@@ -118,7 +135,7 @@ router.get('/payment-methods', authMiddleware, async (req, res) => {
     }
 });
 
-// List individual successful payments for a tariff within a date range
+// List individual approved payments for a tariff within a date range
 router.get('/subscribers', authMiddleware, async (req, res) => {
     try {
         const { type, startDate, endDate } = req.query;
@@ -131,10 +148,12 @@ router.get('/subscribers', authMiddleware, async (req, res) => {
             SELECT p.amount, p.transaction_id, p.created_at, u.full_name, u.username
             FROM payments p
             LEFT JOIN users u ON p.user_id = u.telegram_id
-            WHERE p.status = 'success' AND p.subscription_type = ? AND p.created_at BETWEEN ? AND ?
+            WHERE p.status = ?
+              AND ${typeCase('p.subscription_type')} = ?
+              AND datetime(p.created_at) BETWEEN datetime(?) AND datetime(?)
             ORDER BY p.created_at DESC
             LIMIT 500
-        `).all([type, new Date(startDate).toISOString(), new Date(endDate).toISOString()]);
+        `).all([APPROVED, type, new Date(startDate).toISOString(), new Date(endDate).toISOString()]);
 
         res.json(subscribers);
     } catch (err) {
