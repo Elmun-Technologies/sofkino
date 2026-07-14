@@ -1349,7 +1349,7 @@ async function loadPromocodes() {
                             <span style="font-size: 18px; font-weight: 600;">${p.name || 'Nomsiz'}</span>
                             <div style="font-size: 12px; color: #8b92b0; margin-top: 5px;">
                                 ${status} | Ishlatilgan: ${p.actual_used || 0}${p.usage_limit ? ` / ${p.usage_limit}` : ''}
-                                ${p.expires_at ? ` | Tugaydi: ${new Date(p.expires_at).toLocaleString()}` : ''}
+                                ${p.expires_at ? ` | Tugaydi: ${new Date(p.expires_at).toLocaleDateString()}` : ''}
                             </div>
                         </div>
                     </div>
@@ -1371,6 +1371,11 @@ async function handleAddPromocode(e) {
     e.preventDefault();
     const formData = new FormData(e.target);
     const data = Object.fromEntries(formData.entries());
+
+    // Empty optional fields → null (not "")
+    data.usage_limit = data.usage_limit ? parseInt(data.usage_limit) : null;
+    // A date-only value (YYYY-MM-DD) means "valid through the end of that day".
+    data.expires_at = data.expires_at ? `${data.expires_at} 23:59:59` : null;
 
     try {
         const res = await fetch(`${API_URL}/promocodes`, {
