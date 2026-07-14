@@ -252,6 +252,30 @@ const initDb = () => {
     // Screenshot the user sent as proof of a manual bank transfer
     try { db.exec('ALTER TABLE payments ADD COLUMN screenshot_file_id TEXT'); } catch (e) { }
 
+    // Promocodes (managed from the admin panel)
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS promocodes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code TEXT UNIQUE NOT NULL,
+            name TEXT,
+            usage_limit INTEGER DEFAULT NULL,
+            used_count INTEGER DEFAULT 0,
+            expires_at DATETIME DEFAULT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS promocode_usages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            promocode_id INTEGER,
+            user_id INTEGER,
+            used_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (promocode_id) REFERENCES promocodes(id),
+            FOREIGN KEY (user_id) REFERENCES users(telegram_id)
+        )
+    `);
+
     console.log('Database initialized.');
 };
 

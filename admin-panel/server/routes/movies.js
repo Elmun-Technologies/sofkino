@@ -55,7 +55,7 @@ router.get('/', authMiddleware, async (req, res) => {
 router.get('/pending', authMiddleware, async (req, res) => {
     try {
         const pending = await db.prepare(`
-            SELECT m.id, m.title, m.description, m.created_at, g.name as genre_name
+            SELECT m.id, m.title, m.description, m.access_code, m.created_at, g.name as genre_name
             FROM movies m
             LEFT JOIN genres g ON m.genre_id = g.id
             WHERE m.status = 'pending'
@@ -80,16 +80,21 @@ router.put('/:id/publish-auto', authMiddleware, async (req, res) => {
             return res.status(404).json({ error: 'Kutilayotgan video topilmadi yoki allaqachon nashr qilingan' });
         }
 
-        let accessCode = null;
-        for (let i = 0; i < 5; i++) {
-            const candidate = (Math.floor(Math.random() * 9000) + 1000).toString();
-            const existing = await db.prepare('SELECT id FROM movies WHERE access_code = ?').get([candidate]);
-            if (!existing) {
-                accessCode = candidate;
-                break;
+        // The code was already assigned (and written into the channel post) when
+        // the video arrived, so keep it. Only generate one in the legacy case
+        // where a pending movie somehow has no code yet.
+        let accessCode = movie.access_code;
+        if (!accessCode) {
+            for (let i = 0; i < 5; i++) {
+                const candidate = (Math.floor(Math.random() * 9000) + 1000).toString();
+                const existing = await db.prepare('SELECT id FROM movies WHERE access_code = ?').get([candidate]);
+                if (!existing) {
+                    accessCode = candidate;
+                    break;
+                }
             }
+            if (!accessCode) accessCode = Date.now().toString().slice(-6);
         }
-        if (!accessCode) accessCode = Date.now().toString().slice(-6);
 
         await db.prepare("UPDATE movies SET access_code = ?, status = 'published' WHERE id = ?").run([accessCode, id]);
 

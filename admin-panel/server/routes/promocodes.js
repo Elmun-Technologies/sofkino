@@ -44,7 +44,7 @@ router.delete('/:id', authMiddleware, async (req, res) => {
 router.get('/:id/analytics', authMiddleware, async (req, res) => {
     try {
         const usages = await db.prepare(`
-            SELECT pu.*, u.username, u.first_name, u.last_name, u.language_code, u.created_at as user_created_at
+            SELECT pu.*, u.username, u.full_name, u.joined_at as user_created_at
             FROM promocode_usages pu
             JOIN users u ON pu.user_id = u.telegram_id
             WHERE pu.promocode_id = ?

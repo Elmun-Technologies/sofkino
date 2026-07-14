@@ -19,23 +19,27 @@ router.get('/', authMiddleware, async (req, res) => {
 // Send broadcast
 router.post('/', authMiddleware, async (req, res) => {
     try {
-        const { type, text, mediaId, url, target } = req.body;
+        const { type, text, mediaId, url, target, buttonText } = req.body;
+
+        if (!text || !text.trim()) {
+            return res.status(400).json({ error: 'Xabar matni bo\'sh' });
+        }
 
         // Create News Post
-        const newsResult = db.prepare(`
+        const newsResult = await db.prepare(`
             INSERT INTO news_posts (title, content, type, media_id, url)
             VALUES (?, ?, ?, ?, ?)
-        `).run(text.substring(0, 30) + '...', text, type || 'text', mediaId, url);
-        const postId = newsResult.lastInsertRowid;
+        `).run([text.substring(0, 30) + '...', text, type || 'text', mediaId || null, url || null]);
+        const postId = newsResult.lastID;
 
         // Get users
         let users = [];
         if (target === 'all') {
-            users = db.prepare('SELECT telegram_id FROM users').all();
+            users = await db.prepare('SELECT telegram_id FROM users').all([]);
         } else if (target === 'premium') {
-            users = db.prepare('SELECT telegram_id FROM users WHERE is_premium = 1 AND premium_end > datetime("now")').all();
+            users = await db.prepare("SELECT telegram_id FROM users WHERE is_premium = 1 AND premium_end > datetime('now')").all([]);
         } else if (target === 'regular') {
-            users = db.prepare('SELECT telegram_id FROM users WHERE is_premium = 0 OR premium_end < datetime("now")').all();
+            users = await db.prepare("SELECT telegram_id FROM users WHERE is_premium = 0 OR premium_end IS NULL OR premium_end < datetime('now')").all([]);
         } else {
             return res.status(400).json({ error: 'Invalid target' });
         }
@@ -44,7 +48,8 @@ router.post('/', authMiddleware, async (req, res) => {
             [Markup.button.callback('🤍 Like', `like_news_${postId}`), Markup.button.callback('📤 Share', `share_news_${postId}`)]
         ];
         if (url) {
-            keyboard.unshift([Markup.button.url('🔗 Batafsil', url)]);
+            const label = buttonText && buttonText.trim() ? buttonText.trim() : '🔗 Batafsil';
+            keyboard.unshift([Markup.button.url(label, url)]);
         }
 
         let successCount = 0;

@@ -131,7 +131,7 @@
                     <a href="#" class="nav-link" data-page="movies">🎬 Kinolar Bazasi</a>
                     <a href="#" class="nav-link" data-page="users">👥 Foydalanuvchilar</a>
                     <a href="#" class="nav-link" data-page="promocodes">🎁 Promokodlar</a>
-                    <a href="#" class="nav-link" data-page="genres">🏆 Janrlar (Top 10)</a>
+                    <a href="#" class="nav-link" data-page="genres">🎭 Janrlar</a>
                     <a href="#" class="nav-link" data-page="broadcast">📢 Rassilka & OP</a>
                     <a href="#" class="nav-link" data-page="channels">📢 Majburiy Obuna</a>
                 </nav>
@@ -200,7 +200,7 @@
                         </div>
                         <div class="stat-card">
                             <div class="icon" style="background: linear-gradient(135deg, #10b981, #059669);">👥</div>
-                            <div class="label">YANGI FOYDALANUVCHILAR</div>
+                            <div class="label">JAMI FOYDALANUVCHILAR</div>
                             <div class="value" id="new-users">0</div>
                         </div>
                         <div class="stat-card">
@@ -215,34 +215,10 @@
                         </div>
                     </div>
 
-                    <!-- Alerts -->
+                    <!-- Alerts (populated from real analytics data in loadAnalytics) -->
                     <div class="alerts">
-                        <h3>⚠️ OGOHLANTIRISHLAR & TAVSIYALAR</h3>
-                        <div id="alerts-list">
-                            <div class="alert warning">
-                                <div class="alert-icon">⚠️</div>
-                                <div class="alert-content">
-                                    <strong>Foydalanuvchi</strong>: "Alex" juda ko'p reklama yubormoqda. Blokash ko'rib
-                                    chiqing.
-                                </div>
-                                <button class="alert-action">BLOKLASH</button>
-                            </div>
-                            <div class="alert info">
-                                <div class="alert-icon">📊</div>
-                                <div class="alert-content">
-                                    <strong>"BLOOB100" promokodi</strong>: 80/100 limitga yetdi. Tezda yangilang!
-                                </div>
-                                <button class="alert-action">LIMITNI OSHIRISH</button>
-                            </div>
-                            <div class="alert success">
-                                <div class="alert-icon">✅</div>
-                                <div class="alert-content">
-                                    <strong>Drama janri</strong>: bu hafta 45% ko'proq ko'rildi. Yangi drama
-                                    qo'shlshtavsiya etiladi.
-                                </div>
-                                <button class="alert-action">KINO QO'SHISH</button>
-                            </div>
-                        </div>
+                        <h3>📌 QISQACHA XULOSA</h3>
+                        <div id="alerts-list"></div>
                     </div>
 
                     <!-- Top Genres & Top Movies Row -->
@@ -270,7 +246,7 @@
                             <p class="subtitle">Barcha obstinachilarga real vaqt rejimida Telegram botga ta'sir qiladi.
                             </p>
                         </div>
-                        <div class="total-revenue" id="premium-total-revenue">109,519,100 SO'M</div>
+                        <div class="total-revenue" id="premium-total-revenue">0 SO'M</div>
                     </div>
 
                     <!-- Advanced Filters -->
@@ -589,7 +565,10 @@
 
                 <div id="genres-page" class="page">
                     <div class="dashboard-header">
-                        <h1>🏆 JANRLAR (TOP 10)</h1>
+                        <div>
+                            <h1>🎭 JANRLAR</h1>
+                            <p class="subtitle">Kino janrlarini qo'shing va boshqaring. Kino nashr qilishda shu janrlardan tanlanadi.</p>
+                        </div>
                         <button id="add-genre-btn" class="btn-primary" style="margin: 0;">➕ YANGI JANR</button>
                     </div>
                     <div id="genres-list"></div>
@@ -674,10 +653,11 @@
     <div id="add-movie-modal" class="modal">
         <div class="modal-content">
             <span class="close-modal" id="close-add-movie">&times;</span>
-            <h2 style="color: #667eea; margin-bottom: 25px;">🎬 KINONI NASHR QILISH</h2>
-            <p style="color: #8b92b0; font-size: 12px; margin-top: -15px; margin-bottom: 20px;">Video kanaldan olindi. Endi kino ma'lumotlarini to'ldiring.</p>
+            <h2 id="add-movie-title" style="color: #667eea; margin-bottom: 25px;">🎬 KINONI NASHR QILISH</h2>
+            <p id="add-movie-subtitle" style="color: #8b92b0; font-size: 12px; margin-top: -15px; margin-bottom: 20px;">Video kanaldan olindi. Endi kino ma'lumotlarini to'ldiring.</p>
             <form id="add-movie-form">
                 <input type="hidden" name="pendingId" id="movie-pending-id">
+                <input type="hidden" name="editId" id="movie-edit-id">
                 <div class="form-row">
                     <div class="form-group">
                         <label>🎬 KINO NOMI</label>
@@ -740,7 +720,7 @@
                 </div>
 
                 <div style="display: flex; gap: 10px; margin-top: 25px;">
-                    <button type="submit" class="btn-primary"
+                    <button type="submit" id="add-movie-submit" class="btn-primary"
                         style="flex: 1; margin: 0; padding: 15px; font-weight: 700;">SAQLASH
                         VA CHOP ETISH</button>
                 </div>
@@ -838,7 +818,7 @@
         <div class="modal-content">
             <span class="close-modal" id="close-top-movies">&times;</span>
             <h2 id="top-movies-title" style="color: #667eea; margin-bottom: 25px;">🎬 TOP 10 KINOLAR</h2>
-            <div id="top-movies-list" style="max-height: 400px; overflow-y: auto;"></div>
+            <div id="genre-top-movies-list" style="max-height: 400px; overflow-y: auto;"></div>
         </div>
     </div>
 

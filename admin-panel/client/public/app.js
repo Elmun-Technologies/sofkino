@@ -151,22 +151,61 @@ document.getElementById('users-filter-form').addEventListener('submit', (e) => {
     loadUsers(filters);
 });
 
-async function openPublishModal(pendingId) {
-    const modal = document.getElementById('add-movie-modal');
-    modal.style.display = 'block';
-    document.getElementById('movie-pending-id').value = pendingId;
-
-    // Load genres into select
+async function loadGenreOptions(selectedGenreId) {
     try {
         const res = await fetch(`${API_URL}/genres`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const genres = await res.json();
+        if (!Array.isArray(genres)) return;
         const select = document.getElementById('movie-genre-select');
         select.innerHTML = genres.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+        if (selectedGenreId) select.value = selectedGenreId;
     } catch (err) {
         console.error('Error loading genres:', err);
     }
+}
+
+async function openPublishModal(pendingId) {
+    const form = document.getElementById('add-movie-form');
+    form.reset();
+    document.getElementById('movie-pending-id').value = pendingId;
+    document.getElementById('movie-edit-id').value = '';
+    document.getElementById('add-movie-title').textContent = '🎬 KINONI NASHR QILISH';
+    document.getElementById('add-movie-subtitle').textContent = 'Video kanaldan olindi. Endi kino ma\'lumotlarini to\'ldiring.';
+    document.getElementById('add-movie-submit').textContent = 'SAQLASH VA CHOP ETISH';
+    document.getElementById('movie-access-code').closest('.form-group').style.display = '';
+
+    document.getElementById('add-movie-modal').style.display = 'block';
+    await loadGenreOptions();
+}
+
+// Edit an already-published movie (title/description/genre etc). Looks the
+// movie up from the last loaded /movies list rather than refetching it.
+async function editMovie(id) {
+    const movie = lastLoadedMovies.find(m => m.id === id);
+    if (!movie) return alert('Kino topilmadi. Sahifani yangilang.');
+
+    const form = document.getElementById('add-movie-form');
+    form.reset();
+    document.getElementById('movie-pending-id').value = '';
+    document.getElementById('movie-edit-id').value = id;
+    document.getElementById('add-movie-title').textContent = '✏️ KINONI TAHRIRLASH';
+    document.getElementById('add-movie-subtitle').textContent = `Kod: ${movie.access_code}. Ma'lumotlarni tahrirlab, saqlang.`;
+    document.getElementById('add-movie-submit').textContent = 'O\'ZGARISHLARNI SAQLASH';
+
+    form.querySelector('[name="title"]').value = movie.title || '';
+    form.querySelector('[name="description"]').value = movie.description || '';
+    form.querySelector('[name="country"]').value = movie.country || '';
+    form.querySelector('[name="releaseYear"]').value = movie.release_year || '';
+    form.querySelector('[name="rating"]').value = movie.rating || '';
+    form.querySelector('[name="telegramLink"]').value = movie.telegram_link || '';
+    form.querySelector('[name="externalLinkWeb"]').value = movie.external_link_web || '';
+
+    document.getElementById('movie-access-code').closest('.form-group').style.display = 'none';
+
+    document.getElementById('add-movie-modal').style.display = 'block';
+    await loadGenreOptions(movie.genre_id);
 }
 
 async function loadPendingMovies() {
@@ -177,18 +216,22 @@ async function loadPendingMovies() {
         });
         const pending = await res.json();
 
+        if (!Array.isArray(pending)) {
+            throw new Error(pending?.error || `Server javobi noto'g'ri (status ${res.status})`);
+        }
+
         if (pending.length === 0) {
             listEl.innerHTML = '<p style="color: #8b92b0;">Hozircha kutilayotgan video yo\'q. Videoni saqlash kanaliga yuboring.</p>';
             return;
         }
 
         listEl.innerHTML = pending.map(p => {
-            const hasTitle = p.title && p.title !== '⏳ Kutilmoqda';
+            const hasTitle = p.title && p.title !== '🎬 Nomsiz kino';
             return `
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #0f1429; border: 1px solid #1e2542; border-radius: 10px; margin-bottom: 10px;">
                 <div>
                     <div style="font-weight: 600;">${hasTitle ? p.title : '🎞️ Nomi aniqlanmadi'}</div>
-                    <small style="color: #8b92b0;">${p.genre_name ? '🎭 ' + p.genre_name : '⚠️ Janr aniqlanmadi'} · ${p.created_at || ''}</small>
+                    <small style="color: #8b92b0;">${p.access_code ? '🔑 ' + p.access_code + ' · ' : ''}${p.genre_name ? '🎭 ' + p.genre_name : '⚠️ Janr aniqlanmadi'} · ${p.created_at || ''}</small>
                 </div>
                 <div style="display: flex; gap: 8px;">
                     <button onclick="publishAuto(${p.id})" class="btn-primary" style="margin: 0; padding: 8px 16px;">✅ Nashr qilish</button>
@@ -228,7 +271,10 @@ async function handleAddMovie(e) {
     e.preventDefault();
     const form = e.target;
     const data = Object.fromEntries(new FormData(form).entries());
-    const pendingId = data.pendingId;
+    const isEdit = !!data.editId;
+    const url = isEdit
+        ? `${API_URL}/movies/${data.editId}`
+        : `${API_URL}/movies/${data.pendingId}/publish`;
 
     try {
         const saveBtn = form.querySelector('button[type="submit"]');
@@ -236,7 +282,7 @@ async function handleAddMovie(e) {
         saveBtn.textContent = 'Saqlanmoqda...';
         saveBtn.disabled = true;
 
-        const res = await fetch(`${API_URL}/movies/${pendingId}/publish`, {
+        const res = await fetch(url, {
             method: 'PUT',
             headers: {
                 'Authorization': `Bearer ${token}`,
@@ -293,15 +339,18 @@ async function loadAnalytics() {
         const interest = document.getElementById('filter-interest').value;
 
         let url = `${API_URL}/analytics?`;
-        if (country) url += `country=${country}&`;
-        if (infoAgeMin) url += `age_min=${infoAgeMin}&`;
-        if (infoAgeMax) url += `age_max=${infoAgeMax}&`;
-        if (interest) url += `interest=${interest}&`;
+        if (country) url += `country=${encodeURIComponent(country)}&`;
+        if (infoAgeMin) url += `age_min=${encodeURIComponent(infoAgeMin)}&`;
+        if (infoAgeMax) url += `age_max=${encodeURIComponent(infoAgeMax)}&`;
+        if (interest) url += `interest=${encodeURIComponent(interest)}&`;
 
         const res = await fetch(url, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await res.json();
+        if (!data || data.error) {
+            throw new Error(data?.error || `Server javobi noto'g'ri (status ${res.status})`);
+        }
 
         // Update Total Stats
         document.getElementById('total-revenue').textContent = formatNumber(data.premium?.revenue?.monthly + data.premium?.revenue?.quarterly + data.premium?.revenue?.semi_annual + data.premium?.revenue?.lifetime || 0) + " SO'M";
@@ -309,6 +358,8 @@ async function loadAnalytics() {
         document.getElementById('new-users').textContent = formatNumber(data.users?.total || 0);
         document.getElementById('active-promos').textContent = data.activePromos || 0;
         document.getElementById('today-revenue').textContent = formatNumber(data.todayRevenue || 0) + " SO'M";
+
+        renderDashboardAlerts(data);
 
         // Top Genres Chart
         const genres = data.views?.byGenre || [];
@@ -357,6 +408,44 @@ async function loadAnalytics() {
     }
 }
 
+// Real, data-driven dashboard summary (replaces the old hardcoded demo alerts)
+function renderDashboardAlerts(data) {
+    const el = document.getElementById('alerts-list');
+    if (!el) return;
+
+    const total = data.users?.total || 0;
+    const premium = data.users?.premium || 0;
+    const totalViews = data.views?.total || 0;
+    const topGenre = (data.views?.byGenre || [])[0];
+    const movies = data.movies?.total || 0;
+
+    const items = [];
+
+    if (total === 0) {
+        items.push({ cls: 'info', icon: 'ℹ️', html: 'Hali foydalanuvchilar yo\'q. Botni ulashishni boshlang.' });
+    } else {
+        const premiumPct = total > 0 ? Math.round((premium / total) * 100) : 0;
+        items.push({ cls: 'success', icon: '👥', html: `<strong>${formatNumber(total)}</strong> foydalanuvchi, shundan <strong>${formatNumber(premium)}</strong> ta Premium (${premiumPct}%).` });
+    }
+
+    if (movies === 0) {
+        items.push({ cls: 'warning', icon: '🎬', html: 'Bazada nashr qilingan kino yo\'q. Saqlash kanaliga video yuboring.' });
+    }
+
+    if (topGenre) {
+        items.push({ cls: 'info', icon: '🔥', html: `Eng ko'p ko'rilgan janr: <strong>${topGenre.name}</strong> (${formatNumber(topGenre.views)} ko'rish).` });
+    }
+
+    items.push({ cls: 'info', icon: '👁', html: `Umumiy ko'rishlar soni: <strong>${formatNumber(totalViews)}</strong>.` });
+
+    el.innerHTML = items.map(a => `
+        <div class="alert ${a.cls}">
+            <div class="alert-icon">${a.icon}</div>
+            <div class="alert-content">${a.html}</div>
+        </div>
+    `).join('');
+}
+
 // Bind Skvoznaya Filters
 document.getElementById('apply-skvoznaya-filters').addEventListener('click', loadAnalytics);
 
@@ -387,10 +476,10 @@ async function loadPremium() {
             document.getElementById('details-modal').style.display = 'none';
         }
 
+        // Click on the dark backdrop of ANY modal closes it (not just details)
         window.onclick = (event) => {
-            const modal = document.getElementById('details-modal');
-            if (event.target == modal) {
-                modal.style.display = 'none';
+            if (event.target.classList && event.target.classList.contains('modal')) {
+                event.target.style.display = 'none';
             }
         }
 
@@ -744,6 +833,8 @@ function updatePaymentMethodsUI(methods) {
 }
 
 // Load Movies with Top Performers and Filters
+let lastLoadedMovies = [];
+
 async function loadMovies() {
     const listEl = document.getElementById('movies-list');
     const topRowEl = document.getElementById('movies-top-row');
@@ -757,16 +848,22 @@ async function loadMovies() {
         const interest = document.getElementById('movie-filter-interest') ? document.getElementById('movie-filter-interest').value : '';
 
         let url = `${API_URL}/movies?`;
-        if (country) url += `country=${country}&`;
-        if (age) url += `age=${age}&`;
-        if (interest) url += `interest=${interest}&`;
+        if (country) url += `country=${encodeURIComponent(country)}&`;
+        if (age) url += `age=${encodeURIComponent(age)}&`;
+        if (interest) url += `interest=${encodeURIComponent(interest)}&`;
         if (search) url += `search=${encodeURIComponent(search)}&`;
 
         const res = await fetch(url, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const movies = await res.json();
+
+        if (!Array.isArray(movies)) {
+            throw new Error(movies?.error || `Server javobi noto'g'ri (status ${res.status})`);
+        }
+
         const displayMovies = movies;
+        lastLoadedMovies = movies;
 
         const sortedMovies = [...displayMovies].sort((a, b) => (b.views_count || 0) - (a.views_count || 0));
         const topMovies = sortedMovies.slice(0, 4);
@@ -863,6 +960,7 @@ async function loadMovies() {
                             <td>
                                 <div style="display: flex; gap: 8px;">
                                     <button onclick="showMovieAnalytics(${m.id})" class="btn-stat-mini">📊 ANALITIKA</button>
+                                    <button onclick="editMovie(${m.id})" title="Tahrirlash" style="background: rgba(16, 185, 129, 0.1); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.2); padding: 8px 12px; border-radius: 6px; cursor: pointer;">✏️</button>
                                     <button onclick="deleteMovie(${m.id})" class="btn-delete-mini">🗑</button>
                                 </div>
                             </td>
@@ -902,7 +1000,13 @@ async function showMovieAnalytics(id) {
         });
         const data = await res.json();
 
-        document.getElementById('movie-analytics-title').textContent = data.title.toUpperCase() + ' - ANALITIKA';
+        if (!data || data.error || !data.analytics) {
+            document.getElementById('movie-analytics-title').textContent = 'ANALITIKA';
+            document.getElementById('movie-countries-list').innerHTML = `<p style="color: #ef4444; font-size: 13px;">Xatolik: ${data?.error || 'Ma\'lumot topilmadi'}</p>`;
+            return;
+        }
+
+        document.getElementById('movie-analytics-title').textContent = (data.title || 'KINO').toUpperCase() + ' - ANALITIKA';
         document.getElementById('movie-detail-views').textContent = formatNumber(data.views_count);
         document.getElementById('movie-detail-likes').textContent = `${data.likes_count || 0} / ${data.dislikes_count || 0}`;
         document.getElementById('movie-detail-shares').textContent = formatNumber(data.shares_count || 0);
@@ -972,6 +1076,15 @@ async function loadUsers(filters = {}) {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const users = await res.json();
+
+        if (!Array.isArray(users)) {
+            document.getElementById('users-list').innerHTML = `
+                <div style="background: #141a2e; border: 1px solid #1e2542; padding: 40px; border-radius: 16px; text-align: center;">
+                    <p style="color: #ef4444;">Xatolik: ${users?.error || 'Server javobi noto\'g\'ri. Qayta login qiling.'}</p>
+                </div>
+            `;
+            return;
+        }
 
         if (users.length === 0) {
             document.getElementById('users-list').innerHTML = `
@@ -1055,6 +1168,15 @@ async function loadGenres() {
         });
         const genres = await res.json();
 
+        if (!Array.isArray(genres)) {
+            document.getElementById('genres-list').innerHTML = `
+                <div style="background: #141a2e; border: 1px solid #1e2542; padding: 40px; border-radius: 16px; text-align: center;">
+                    <p style="color: #ef4444;">Xatolik: ${genres?.error || 'Server javobi noto\'g\'ri'}</p>
+                </div>
+            `;
+            return;
+        }
+
         if (genres.length === 0) {
             document.getElementById('genres-list').innerHTML = `
                 <div style="background: #141a2e; border: 1px solid #1e2542; padding: 40px; border-radius: 16px; text-align: center;">
@@ -1079,7 +1201,7 @@ async function loadGenres() {
                         <span style="display: block; color: #8b92b0; font-size: 10px; text-transform: uppercase;">KO'RISHLAR</span>
                         <span style="color: #10b981; font-weight: 700;">${formatNumber(g.views_count || 0)} 👁</span>
                     </div>
-                    <button onclick="viewTopMovies(${g.id}, '${g.name}')" style="background: rgba(59, 130, 246, 0.1); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.2); padding: 8px 12px; border-radius: 6px; cursor: pointer; margin-left: 10px;">Top 10</button>
+                    <button onclick="viewTopMovies(${g.id}, '${(g.name || '').replace(/'/g, "\\'")}')" style="background: rgba(59, 130, 246, 0.1); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.2); padding: 8px 12px; border-radius: 6px; cursor: pointer; margin-left: 10px;">Top 10</button>
                     <button onclick="deleteGenre(${g.id})" style="background: rgba(239, 68, 68, 0.1); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.2); padding: 8px 12px; border-radius: 6px; cursor: pointer; margin-left: 10px;">🗑</button>
                 </div>
             </div>
@@ -1156,11 +1278,18 @@ async function viewTopMovies(genreId, genreName) {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const movies = await res.json();
+        const listEl = document.getElementById('genre-top-movies-list');
 
         document.getElementById('top-movies-title').textContent = `🎬 ${genreName} - TOP 10 KINOLAR`;
+        document.getElementById('top-movies-modal').style.display = 'block';
+
+        if (!Array.isArray(movies)) {
+            listEl.innerHTML = `<p style="color: #ef4444;">Xatolik: ${movies?.error || 'Server javobi noto\'g\'ri'}</p>`;
+            return;
+        }
 
         if (movies.length === 0) {
-            document.getElementById('top-movies-list').innerHTML = '<p style="color: #8b92b0;">Bu janrda hali kinolar yo\'q.</p>';
+            listEl.innerHTML = '<p style="color: #8b92b0;">Bu janrda hali kinolar yo\'q.</p>';
         } else {
             const html = movies.map((m, i) => `
                 <div style="padding: 15px; background: #0f1429; border: 1px solid #1e2542; margin: 10px 0; border-radius: 8px;">
@@ -1176,10 +1305,8 @@ async function viewTopMovies(genreId, genreName) {
                     </div>
                 </div>
             `).join('');
-            document.getElementById('top-movies-list').innerHTML = html;
+            listEl.innerHTML = html;
         }
-
-        document.getElementById('top-movies-modal').style.display = 'block';
     } catch (err) {
         console.error('Error loading top movies:', err);
     }
@@ -1191,6 +1318,15 @@ async function loadPromocodes() {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const promocodes = await res.json();
+
+        if (!Array.isArray(promocodes)) {
+            document.getElementById('promocodes-list').innerHTML = `
+                <div style="background: #141a2e; border: 1px solid #1e2542; padding: 40px; border-radius: 16px; text-align: center;">
+                    <p style="color: #ef4444;">Xatolik: ${promocodes?.error || 'Server javobi noto\'g\'ri'}</p>
+                </div>
+            `;
+            return;
+        }
 
         if (promocodes.length === 0) {
             document.getElementById('promocodes-list').innerHTML = `
@@ -1281,20 +1417,27 @@ async function viewPromocodeAnalytics(id) {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const usages = await res.json();
+        const contentEl = document.getElementById('promocode-analytics-content');
+
+        if (!Array.isArray(usages)) {
+            document.getElementById('promocode-analytics-title').textContent = '📊 Promokod Analitikasi';
+            contentEl.innerHTML = `<p style="color: #ef4444;">Xatolik: ${usages?.error || 'Server javobi noto\'g\'ri'}</p>`;
+            return;
+        }
 
         document.getElementById('promocode-analytics-title').textContent = `📊 Promokod Analitikasi (${usages.length} foydalanuvchi)`;
 
         if (usages.length === 0) {
-            document.getElementById('promocode-analytics-content').innerHTML = '<p style="color: #8b92b0;">Hali hech kim ishlatmagan.</p>';
+            contentEl.innerHTML = '<p style="color: #8b92b0;">Hali hech kim ishlatmagan.</p>';
         } else {
             const html = usages.map(u => `
                 <div style="padding: 10px; background: #0f1429; border: 1px solid #1e2542; margin: 5px 0; border-radius: 8px;">
-                    <strong>${u.first_name || ''} ${u.last_name || ''} (@${u.username || 'no username'})</strong><br>
-                    <small style="color: #8b92b0;">Til: ${u.language_code || 'noma\'lum'} | Ro'yxatdan o'tgan: ${new Date(u.user_created_at).toLocaleDateString()}</small><br>
+                    <strong>${u.full_name || 'N/A'} (@${u.username || 'no username'})</strong><br>
+                    <small style="color: #8b92b0;">Ro'yxatdan o'tgan: ${u.user_created_at ? new Date(u.user_created_at).toLocaleDateString() : '-'}</small><br>
                     <small style="color: #8b92b0;">Ishlatgan: ${new Date(u.used_at).toLocaleString()}</small>
                 </div>
             `).join('');
-            document.getElementById('promocode-analytics-content').innerHTML = html;
+            contentEl.innerHTML = html;
         }
 
         document.getElementById('promocode-analytics-modal').style.display = 'block';
@@ -1325,6 +1468,15 @@ async function loadChannels() {
         });
         const channels = await res.json();
         const listEl = document.getElementById('channels-list');
+
+        if (!Array.isArray(channels)) {
+            listEl.innerHTML = `
+                <div style="background: #141a2e; border: 1px solid #1e2542; padding: 40px; border-radius: 16px; text-align: center;">
+                    <p style="color: #ef4444;">Xatolik: ${channels?.error || 'Server javobi noto\'g\'ri'}</p>
+                </div>
+            `;
+            return;
+        }
 
         if (channels.length === 0) {
             listEl.innerHTML = `
@@ -1408,6 +1560,7 @@ async function toggleChannel(id, currentStatus) {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const channels = await res.json();
+        if (!Array.isArray(channels)) return;
         const channel = channels.find(c => c.id === id);
 
         await fetch(`${API_URL}/channels/${id}`, {
@@ -1438,158 +1591,115 @@ async function deleteChannel(id) {
 }
 
 // Broadcasts (News Posts)
+function broadcastFormHtml() {
+    return `
+        <div style="background: #141a2e; border: 1px solid #1e2542; padding: 30px; border-radius: 16px; margin-bottom: 30px;">
+            <h3 style="color: #667eea; margin-bottom: 20px;">📤 YANGI RASSILKA YUBORISH</h3>
+            <form id="broadcast-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>TURI</label>
+                        <select name="type" id="broadcast-type">
+                            <option value="text">Matn</option>
+                            <option value="image">Rasm</option>
+                            <option value="video">Video</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>MAQSAD</label>
+                        <select name="target">
+                            <option value="all">Barchaga</option>
+                            <option value="premium">Faqat Premium</option>
+                            <option value="regular">Faqat Oddiy</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>MATN</label>
+                    <textarea name="text" placeholder="Xabar matni..." rows="4" required></textarea>
+                </div>
+                <div class="form-group" id="media-group" style="display: none;">
+                    <label>MEDIA ID (rasm/video Telegram file_id)</label>
+                    <input type="text" name="mediaId" placeholder="Masalan: AgACAgIAAxkBAAIB...">
+                    <small style="color: #8b92b0; display: block; margin-top: 6px;">Rasm yoki videoni botga yuborib, uning file_id sini shu yerga qo'ying.</small>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>🔗 TUGMA HAVOLASI (ixtiyoriy)</label>
+                        <input type="url" name="url" placeholder="https://... yoki t.me/...">
+                    </div>
+                    <div class="form-group">
+                        <label>🔘 TUGMA NOMI (ixtiyoriy)</label>
+                        <input type="text" name="buttonText" placeholder="Masalan: 🎬 Kinoni ko'rish" maxlength="64">
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary" style="width: 100%; padding: 15px;">YUBORISH</button>
+            </form>
+        </div>
+    `;
+}
+
+function bindBroadcastForm() {
+    setTimeout(() => {
+        const typeSelect = document.getElementById('broadcast-type');
+        const form = document.getElementById('broadcast-form');
+        if (typeSelect) typeSelect.addEventListener('change', (e) => {
+            document.getElementById('media-group').style.display = e.target.value !== 'text' ? 'block' : 'none';
+        });
+        if (form) form.addEventListener('submit', handleBroadcast);
+    }, 100);
+}
+
 async function loadBroadcasts() {
     try {
         const res = await fetch(`${API_URL}/broadcast`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
-        const posts = await res.json();
+        const postsRaw = await res.json();
+        // Never let a broken history fetch hide the send form - fall back to empty.
+        const posts = Array.isArray(postsRaw) ? postsRaw : [];
         const pageEl = document.getElementById('broadcast-page');
 
-        if (posts.length === 0) {
-            pageEl.innerHTML = `
-                <div class="dashboard-header">
-                    <h1>📢 RASSILKA VA ANALITIKA</h1>
-                    <p class="subtitle">Yangi xabar yuboring yoki tarixni ko'ring.</p>
-                </div>
-                <div style="background: #141a2e; border: 1px solid #1e2542; padding: 30px; border-radius: 16px; margin-bottom: 30px;">
-                    <h3 style="color: #667eea; margin-bottom: 20px;">📤 YANGI RASSILKA YUBORISH</h3>
-                    <form id="broadcast-form">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>TURI</label>
-                                <select name="type" id="broadcast-type">
-                                    <option value="text">Matn</option>
-                                    <option value="image">Rasm</option>
-                                    <option value="video">Video</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>MAQSAD</label>
-                                <select name="target">
-                                    <option value="all">Barchaga</option>
-                                    <option value="premium">Faqat Premium</option>
-                                    <option value="regular">Faqat Oddiy</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label>MATN</label>
-                            <textarea name="text" placeholder="Xabar matni..." rows="4" required></textarea>
-                        </div>
-                        <div class="form-group" id="media-group" style="display: none;">
-                            <label>MEDIA ID (Telegram file_id)</label>
-                            <input type="text" name="mediaId" placeholder="Masalan: AgACAgIAAxkBAAIB...">
-                        </div>
-                        <div class="form-group">
-                            <label>LINK (ixtiyoriy)</label>
-                            <input type="url" name="url" placeholder="https://...">
-                        </div>
-                        <button type="submit" class="btn-primary" style="width: 100%; padding: 15px;">YUBORISH</button>
-                    </form>
-                </div>
-                <div style="background: #141a2e; border: 1px solid #1e2542; padding: 40px; border-radius: 16px; text-align: center;">
-                    <p style="color: #8b92b0;">Hozircha rassilkalar tarixi bo'sh.</p>
-                </div>
-            `;
-            // Add event listeners
-            setTimeout(() => {
-                const typeSelect = document.getElementById('broadcast-type');
-                const form = document.getElementById('broadcast-form');
-                if (typeSelect) typeSelect.addEventListener('change', (e) => {
-                    document.getElementById('media-group').style.display = e.target.value !== 'text' ? 'block' : 'none';
-                });
-                if (form) form.addEventListener('submit', handleBroadcast);
-            }, 100);
-            return;
-        }
-
-        const html = `
+        const header = `
             <div class="dashboard-header">
                 <h1>📢 RASSILKA VA ANALITIKA</h1>
                 <p class="subtitle">Yangi xabar yuboring yoki tarixni ko'ring.</p>
             </div>
-            <div style="background: #141a2e; border: 1px solid #1e2542; padding: 30px; border-radius: 16px; margin-bottom: 30px;">
-                <h3 style="color: #667eea; margin-bottom: 20px;">📤 YANGI RASSILKA YUBORISH</h3>
-                <form id="broadcast-form">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>TURI</label>
-                            <select name="type" id="broadcast-type">
-                                <option value="text">Matn</option>
-                                <option value="image">Rasm</option>
-                                <option value="video">Video</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>MAQSAD</label>
-                            <select name="target">
-                                <option value="all">Barchaga</option>
-                                <option value="premium">Faqat Premium</option>
-                                <option value="regular">Faqat Oddiy</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label>MATN</label>
-                        <textarea name="text" placeholder="Xabar matni..." rows="4" required></textarea>
-                    </div>
-                    <div class="form-group" id="media-group" style="display: none;">
-                        <label>MEDIA ID (Telegram file_id)</label>
-                        <input type="text" name="mediaId" placeholder="Masalan: AgACAgIAAxkBAAIB...">
-                    </div>
-                    <div class="form-group">
-                        <label>LINK (ixtiyoriy)</label>
-                        <input type="url" name="url" placeholder="https://...">
-                    </div>
-                    <button type="submit" class="btn-primary" style="width: 100%; padding: 15px;">YUBORISH</button>
-                </form>
-            </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>XABAR</th>
-                        <th>TURI</th>
-                        <th>STATISTIKA</th>
-                        <th>SANA</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${posts.map(p => `
-                        <tr>
-                            <td style="max-width: 300px;">
-                                <div style="font-weight: 700;">${p.title || 'Sarlavhasiz'}</div>
-                                <p style="font-size: 12px; color: #8b92b0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${p.content || ''}</p>
-                            </td>
-                            <td>
-                                <span style="font-size: 11px; padding: 4px 8px; border-radius: 4px; background: rgba(102, 126, 234, 0.1); color: #667eea; text-transform: uppercase;">
-                                    ${p.type || 'text'}
-                                </span>
-                            </td>
-                            <td>
-                                <div style="display: flex; gap: 15px; font-size: 13px;">
-                                    <span title="Views">👁 ${formatNumber(p.views_count || 0)}</span>
-                                    <span title="Likes" style="color: #10b981;">👍 ${formatNumber(p.likes_count || 0)}</span>
-                                    <span title="Shares" style="color: #6366f1;">📤 ${formatNumber(p.shares_count || 0)}</span>
-                                </div>
-                            </td>
-                            <td style="font-size: 12px; color: #8b92b0;">${new Date(p.created_at).toLocaleString()}</td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
         `;
-        pageEl.innerHTML = html;
 
-        // Add event listeners
-        setTimeout(() => {
-            const typeSelect = document.getElementById('broadcast-type');
-            const form = document.getElementById('broadcast-form');
-            if (typeSelect) typeSelect.addEventListener('change', (e) => {
-                document.getElementById('media-group').style.display = e.target.value !== 'text' ? 'block' : 'none';
-            });
-            if (form) form.addEventListener('submit', handleBroadcast);
-        }, 100);
+        const historyHtml = posts.length === 0
+            ? `<div style="background: #141a2e; border: 1px solid #1e2542; padding: 40px; border-radius: 16px; text-align: center;">
+                    <p style="color: #8b92b0;">Hozircha rassilkalar tarixi bo'sh.</p>
+               </div>`
+            : `<table>
+                    <thead>
+                        <tr><th>XABAR</th><th>TURI</th><th>STATISTIKA</th><th>SANA</th></tr>
+                    </thead>
+                    <tbody>
+                        ${posts.map(p => `
+                            <tr>
+                                <td style="max-width: 300px;">
+                                    <div style="font-weight: 700;">${p.title || 'Sarlavhasiz'}</div>
+                                    <p style="font-size: 12px; color: #8b92b0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${p.content || ''}</p>
+                                </td>
+                                <td>
+                                    <span style="font-size: 11px; padding: 4px 8px; border-radius: 4px; background: rgba(102, 126, 234, 0.1); color: #667eea; text-transform: uppercase;">${p.type || 'text'}</span>
+                                </td>
+                                <td>
+                                    <div style="display: flex; gap: 15px; font-size: 13px;">
+                                        <span title="Views">👁 ${formatNumber(p.views_count || 0)}</span>
+                                        <span title="Likes" style="color: #10b981;">👍 ${formatNumber(p.likes_count || 0)}</span>
+                                        <span title="Shares" style="color: #6366f1;">📤 ${formatNumber(p.shares_count || 0)}</span>
+                                    </div>
+                                </td>
+                                <td style="font-size: 12px; color: #8b92b0;">${new Date(p.created_at).toLocaleString()}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+               </table>`;
+
+        pageEl.innerHTML = header + broadcastFormHtml() + historyHtml;
+        bindBroadcastForm();
     } catch (err) {
         console.error(err);
     }

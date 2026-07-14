@@ -82,17 +82,34 @@ class Movie {
         return stmt.all(genreId, limit);
     }
 
+    // Generate a unique 4-digit access code (falls back to a timestamp-based
+    // code in the unlikely event 5 random tries all collide).
+    static generateCode() {
+        for (let i = 0; i < 5; i++) {
+            const candidate = String(Math.floor(Math.random() * 9000) + 1000);
+            if (!db.prepare('SELECT 1 FROM movies WHERE access_code = ?').get(candidate)) {
+                return candidate;
+            }
+        }
+        return String(Date.now()).slice(-6);
+    }
+
     static createPending({ fileId, sourceChannelId, sourceMessageId, caption }) {
         const { title, description, genreHint } = parseCaption(caption);
         const genreId = matchGenreId(genreHint);
+        // Assign the access code right away so it can be written into the
+        // channel caption immediately. The movie still isn't reachable by
+        // that code until an admin taps "Nashr qilish" (findByCode only
+        // returns published rows), so the code is reserved, not yet live.
+        const accessCode = Movie.generateCode();
 
         const stmt = db.prepare(`
-            INSERT INTO movies (title, description, genre_id, file_id, source_channel_id, source_message_id, source_caption, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+            INSERT INTO movies (title, description, genre_id, access_code, file_id, source_channel_id, source_message_id, source_caption, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
         `);
-        const result = stmt.run(title || '⏳ Kutilmoqda', description, genreId, fileId, String(sourceChannelId), sourceMessageId, caption || null);
+        const result = stmt.run(title || '🎬 Nomsiz kino', description, genreId, accessCode, fileId, String(sourceChannelId), sourceMessageId, caption || null);
 
-        return { ...result, title: title || null, genreId };
+        return { ...result, title: title || null, genreId, accessCode };
     }
 
     static getPending() {
@@ -106,20 +123,14 @@ class Movie {
     }
 
     // One-click publish: keeps whatever title/genre/description were parsed
-    // from the channel caption at ingest time, just assigns a fresh code.
+    // from the channel caption at ingest time. The code was already assigned
+    // (and written into the channel) at ingest, so this just flips the movie
+    // live - only regenerating a code in the legacy case where one is missing.
     static publishAuto(id) {
         const movie = db.prepare("SELECT * FROM movies WHERE id = ? AND status = 'pending'").get(id);
         if (!movie) return null;
 
-        let accessCode = null;
-        for (let i = 0; i < 5; i++) {
-            const candidate = String(Math.floor(Math.random() * 9000) + 1000);
-            if (!db.prepare('SELECT 1 FROM movies WHERE access_code = ?').get(candidate)) {
-                accessCode = candidate;
-                break;
-            }
-        }
-        if (!accessCode) accessCode = String(Date.now()).slice(-6);
+        const accessCode = movie.access_code || Movie.generateCode();
 
         db.prepare("UPDATE movies SET access_code = ?, status = 'published' WHERE id = ?").run(accessCode, id);
 
