@@ -19,7 +19,7 @@ router.get('/', authMiddleware, async (req, res) => {
 // Send broadcast
 router.post('/', authMiddleware, async (req, res) => {
     try {
-        const { type, text, mediaId, url, target } = req.body;
+        const { type, text, mediaId, url, target, buttonText } = req.body;
 
         if (!text || !text.trim()) {
             return res.status(400).json({ error: 'Xabar matni bo\'sh' });
@@ -48,7 +48,8 @@ router.post('/', authMiddleware, async (req, res) => {
             [Markup.button.callback('🤍 Like', `like_news_${postId}`), Markup.button.callback('📤 Share', `share_news_${postId}`)]
         ];
         if (url) {
-            keyboard.unshift([Markup.button.url('🔗 Batafsil', url)]);
+            const label = buttonText && buttonText.trim() ? buttonText.trim() : '🔗 Batafsil';
+            keyboard.unshift([Markup.button.url(label, url)]);
         }
 
         let successCount = 0;

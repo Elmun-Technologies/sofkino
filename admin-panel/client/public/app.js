@@ -1591,6 +1591,65 @@ async function deleteChannel(id) {
 }
 
 // Broadcasts (News Posts)
+function broadcastFormHtml() {
+    return `
+        <div style="background: #141a2e; border: 1px solid #1e2542; padding: 30px; border-radius: 16px; margin-bottom: 30px;">
+            <h3 style="color: #667eea; margin-bottom: 20px;">📤 YANGI RASSILKA YUBORISH</h3>
+            <form id="broadcast-form">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>TURI</label>
+                        <select name="type" id="broadcast-type">
+                            <option value="text">Matn</option>
+                            <option value="image">Rasm</option>
+                            <option value="video">Video</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>MAQSAD</label>
+                        <select name="target">
+                            <option value="all">Barchaga</option>
+                            <option value="premium">Faqat Premium</option>
+                            <option value="regular">Faqat Oddiy</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>MATN</label>
+                    <textarea name="text" placeholder="Xabar matni..." rows="4" required></textarea>
+                </div>
+                <div class="form-group" id="media-group" style="display: none;">
+                    <label>MEDIA ID (rasm/video Telegram file_id)</label>
+                    <input type="text" name="mediaId" placeholder="Masalan: AgACAgIAAxkBAAIB...">
+                    <small style="color: #8b92b0; display: block; margin-top: 6px;">Rasm yoki videoni botga yuborib, uning file_id sini shu yerga qo'ying.</small>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>🔗 TUGMA HAVOLASI (ixtiyoriy)</label>
+                        <input type="url" name="url" placeholder="https://... yoki t.me/...">
+                    </div>
+                    <div class="form-group">
+                        <label>🔘 TUGMA NOMI (ixtiyoriy)</label>
+                        <input type="text" name="buttonText" placeholder="Masalan: 🎬 Kinoni ko'rish" maxlength="64">
+                    </div>
+                </div>
+                <button type="submit" class="btn-primary" style="width: 100%; padding: 15px;">YUBORISH</button>
+            </form>
+        </div>
+    `;
+}
+
+function bindBroadcastForm() {
+    setTimeout(() => {
+        const typeSelect = document.getElementById('broadcast-type');
+        const form = document.getElementById('broadcast-form');
+        if (typeSelect) typeSelect.addEventListener('change', (e) => {
+            document.getElementById('media-group').style.display = e.target.value !== 'text' ? 'block' : 'none';
+        });
+        if (form) form.addEventListener('submit', handleBroadcast);
+    }, 100);
+}
+
 async function loadBroadcasts() {
     try {
         const res = await fetch(`${API_URL}/broadcast`, {
@@ -1601,150 +1660,46 @@ async function loadBroadcasts() {
         const posts = Array.isArray(postsRaw) ? postsRaw : [];
         const pageEl = document.getElementById('broadcast-page');
 
-        if (posts.length === 0) {
-            pageEl.innerHTML = `
-                <div class="dashboard-header">
-                    <h1>📢 RASSILKA VA ANALITIKA</h1>
-                    <p class="subtitle">Yangi xabar yuboring yoki tarixni ko'ring.</p>
-                </div>
-                <div style="background: #141a2e; border: 1px solid #1e2542; padding: 30px; border-radius: 16px; margin-bottom: 30px;">
-                    <h3 style="color: #667eea; margin-bottom: 20px;">📤 YANGI RASSILKA YUBORISH</h3>
-                    <form id="broadcast-form">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>TURI</label>
-                                <select name="type" id="broadcast-type">
-                                    <option value="text">Matn</option>
-                                    <option value="image">Rasm</option>
-                                    <option value="video">Video</option>
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label>MAQSAD</label>
-                                <select name="target">
-                                    <option value="all">Barchaga</option>
-                                    <option value="premium">Faqat Premium</option>
-                                    <option value="regular">Faqat Oddiy</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label>MATN</label>
-                            <textarea name="text" placeholder="Xabar matni..." rows="4" required></textarea>
-                        </div>
-                        <div class="form-group" id="media-group" style="display: none;">
-                            <label>MEDIA ID (Telegram file_id)</label>
-                            <input type="text" name="mediaId" placeholder="Masalan: AgACAgIAAxkBAAIB...">
-                        </div>
-                        <div class="form-group">
-                            <label>LINK (ixtiyoriy)</label>
-                            <input type="url" name="url" placeholder="https://...">
-                        </div>
-                        <button type="submit" class="btn-primary" style="width: 100%; padding: 15px;">YUBORISH</button>
-                    </form>
-                </div>
-                <div style="background: #141a2e; border: 1px solid #1e2542; padding: 40px; border-radius: 16px; text-align: center;">
-                    <p style="color: #8b92b0;">Hozircha rassilkalar tarixi bo'sh.</p>
-                </div>
-            `;
-            // Add event listeners
-            setTimeout(() => {
-                const typeSelect = document.getElementById('broadcast-type');
-                const form = document.getElementById('broadcast-form');
-                if (typeSelect) typeSelect.addEventListener('change', (e) => {
-                    document.getElementById('media-group').style.display = e.target.value !== 'text' ? 'block' : 'none';
-                });
-                if (form) form.addEventListener('submit', handleBroadcast);
-            }, 100);
-            return;
-        }
-
-        const html = `
+        const header = `
             <div class="dashboard-header">
                 <h1>📢 RASSILKA VA ANALITIKA</h1>
                 <p class="subtitle">Yangi xabar yuboring yoki tarixni ko'ring.</p>
             </div>
-            <div style="background: #141a2e; border: 1px solid #1e2542; padding: 30px; border-radius: 16px; margin-bottom: 30px;">
-                <h3 style="color: #667eea; margin-bottom: 20px;">📤 YANGI RASSILKA YUBORISH</h3>
-                <form id="broadcast-form">
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label>TURI</label>
-                            <select name="type" id="broadcast-type">
-                                <option value="text">Matn</option>
-                                <option value="image">Rasm</option>
-                                <option value="video">Video</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label>MAQSAD</label>
-                            <select name="target">
-                                <option value="all">Barchaga</option>
-                                <option value="premium">Faqat Premium</option>
-                                <option value="regular">Faqat Oddiy</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="form-group">
-                        <label>MATN</label>
-                        <textarea name="text" placeholder="Xabar matni..." rows="4" required></textarea>
-                    </div>
-                    <div class="form-group" id="media-group" style="display: none;">
-                        <label>MEDIA ID (Telegram file_id)</label>
-                        <input type="text" name="mediaId" placeholder="Masalan: AgACAgIAAxkBAAIB...">
-                    </div>
-                    <div class="form-group">
-                        <label>LINK (ixtiyoriy)</label>
-                        <input type="url" name="url" placeholder="https://...">
-                    </div>
-                    <button type="submit" class="btn-primary" style="width: 100%; padding: 15px;">YUBORISH</button>
-                </form>
-            </div>
-            <table>
-                <thead>
-                    <tr>
-                        <th>XABAR</th>
-                        <th>TURI</th>
-                        <th>STATISTIKA</th>
-                        <th>SANA</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${posts.map(p => `
-                        <tr>
-                            <td style="max-width: 300px;">
-                                <div style="font-weight: 700;">${p.title || 'Sarlavhasiz'}</div>
-                                <p style="font-size: 12px; color: #8b92b0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${p.content || ''}</p>
-                            </td>
-                            <td>
-                                <span style="font-size: 11px; padding: 4px 8px; border-radius: 4px; background: rgba(102, 126, 234, 0.1); color: #667eea; text-transform: uppercase;">
-                                    ${p.type || 'text'}
-                                </span>
-                            </td>
-                            <td>
-                                <div style="display: flex; gap: 15px; font-size: 13px;">
-                                    <span title="Views">👁 ${formatNumber(p.views_count || 0)}</span>
-                                    <span title="Likes" style="color: #10b981;">👍 ${formatNumber(p.likes_count || 0)}</span>
-                                    <span title="Shares" style="color: #6366f1;">📤 ${formatNumber(p.shares_count || 0)}</span>
-                                </div>
-                            </td>
-                            <td style="font-size: 12px; color: #8b92b0;">${new Date(p.created_at).toLocaleString()}</td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
         `;
-        pageEl.innerHTML = html;
 
-        // Add event listeners
-        setTimeout(() => {
-            const typeSelect = document.getElementById('broadcast-type');
-            const form = document.getElementById('broadcast-form');
-            if (typeSelect) typeSelect.addEventListener('change', (e) => {
-                document.getElementById('media-group').style.display = e.target.value !== 'text' ? 'block' : 'none';
-            });
-            if (form) form.addEventListener('submit', handleBroadcast);
-        }, 100);
+        const historyHtml = posts.length === 0
+            ? `<div style="background: #141a2e; border: 1px solid #1e2542; padding: 40px; border-radius: 16px; text-align: center;">
+                    <p style="color: #8b92b0;">Hozircha rassilkalar tarixi bo'sh.</p>
+               </div>`
+            : `<table>
+                    <thead>
+                        <tr><th>XABAR</th><th>TURI</th><th>STATISTIKA</th><th>SANA</th></tr>
+                    </thead>
+                    <tbody>
+                        ${posts.map(p => `
+                            <tr>
+                                <td style="max-width: 300px;">
+                                    <div style="font-weight: 700;">${p.title || 'Sarlavhasiz'}</div>
+                                    <p style="font-size: 12px; color: #8b92b0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${p.content || ''}</p>
+                                </td>
+                                <td>
+                                    <span style="font-size: 11px; padding: 4px 8px; border-radius: 4px; background: rgba(102, 126, 234, 0.1); color: #667eea; text-transform: uppercase;">${p.type || 'text'}</span>
+                                </td>
+                                <td>
+                                    <div style="display: flex; gap: 15px; font-size: 13px;">
+                                        <span title="Views">👁 ${formatNumber(p.views_count || 0)}</span>
+                                        <span title="Likes" style="color: #10b981;">👍 ${formatNumber(p.likes_count || 0)}</span>
+                                        <span title="Shares" style="color: #6366f1;">📤 ${formatNumber(p.shares_count || 0)}</span>
+                                    </div>
+                                </td>
+                                <td style="font-size: 12px; color: #8b92b0;">${new Date(p.created_at).toLocaleString()}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+               </table>`;
+
+        pageEl.innerHTML = header + broadcastFormHtml() + historyHtml;
+        bindBroadcastForm();
     } catch (err) {
         console.error(err);
     }
