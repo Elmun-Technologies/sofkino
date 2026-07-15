@@ -133,6 +133,11 @@ ${cardText}
         const plan = waitingForScreenshot[ctx.from.id];
         delete waitingForScreenshot[ctx.from.id];
 
+        // `plan` only ever reaches here after requestScreenshot() already
+        // validated it against PLAN_MAP, but re-checking at the write site
+        // keeps the invariant "payments.subscription_type is always a valid
+        // PLAN_MAP key" true even if a future code path sets
+        // waitingForScreenshot without going through that check.
         const selectedPlan = PLAN_MAP[plan];
         if (!selectedPlan) return;
 
@@ -180,8 +185,26 @@ ${cardText}
         }
 
         const plan = PLAN_MAP[payment.subscription_type];
+
+        // Never silently fall back to a default duration for an unrecognized
+        // subscription_type (e.g. corrupted/legacy data) - that used to grant
+        // a fixed 30 days regardless of what was actually paid for, so a
+        // 3-month/6-month/lifetime payment could quietly expire after a month.
+        // Instead leave the payment pending and get a human's attention.
+        if (!plan) {
+            console.error(`approvePayment: payment #${paymentId} has unknown subscription_type "${payment.subscription_type}" - not approved, left pending`);
+
+            await ctx.answerCbQuery('❌ Xatolik: noma\'lum tarif turi. To\'lov "pending" holatida qoldi.', { show_alert: true });
+
+            const alertText = `⚠️ <b>To'lov #${paymentId} avtomatik tasdiqlanmadi</b>\n\nNoma'lum tarif turi: <code>${escapeHtml(payment.subscription_type || 'bo\'sh')}</code>\n👤 Foydalanuvchi ID: ${payment.user_id}\n\nTo'lov "pending" holatida saqlandi (Premium berilmadi). Dasturchiga murojaat qiling.`;
+            for (const adminId of getAdminIds()) {
+                await ctx.telegram.sendMessage(adminId, alertText, { parse_mode: 'HTML' }).catch(() => { });
+            }
+            return;
+        }
+
         db.prepare(`UPDATE payments SET status = 'approved' WHERE id = ?`).run(paymentId);
-        User.setPremium(payment.user_id, plan ? plan.days : 30);
+        User.setPremium(payment.user_id, plan.days);
 
         await ctx.answerCbQuery('✅ Tasdiqlandi');
         // The admin notification is a photo (the screenshot), so its caption -

@@ -8,6 +8,12 @@ const { isAdminId } = require('../config/admins');
 
 // Admins always count as premium (unlimited), regardless of any actual
 // subscription row - pass the Telegram user id as userId to apply this.
+//
+// premium_end is only ever written by User.setPremium() as end.toISOString()
+// (e.g. "2026-08-14T12:34:56.789Z"), which new Date() parses correctly and
+// unambiguously per the ISO 8601 spec on every JS engine. A user who never
+// had premium set has premium_end = NULL, and new Date(null) resolves to the
+// 1970 epoch - safely in the past, so it correctly evaluates as not premium.
 function isPremiumUser(user, userId) {
     if (isAdminId(userId)) return true;
     return !!(user && user.is_premium && new Date(user.premium_end) > new Date());
