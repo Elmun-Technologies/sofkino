@@ -276,6 +276,35 @@ const initDb = () => {
         )
     `);
 
+    // Daily greeting/marketing message templates, one per day of week
+    // (0=Sunday..6=Saturday, matching JS Date.getDay()) - prepended to the
+    // 10:00 progrev job's movie recommendation. Editable from the admin panel
+    // so wording/tactic can change without a redeploy. {name} is replaced with
+    // the recipient's display name at send time.
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS daily_messages (
+            day_of_week INTEGER PRIMARY KEY,
+            template TEXT NOT NULL,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    `);
+
+    // Seed a default weekly calendar (INSERT OR IGNORE - a no-op once rows
+    // exist, so admin edits made via the panel are never overwritten).
+    const defaultDailyMessages = [
+        [0, "Assalomu alaykum, {name}! 🌅 Yakshanba kayfiyatingiz zo'r bo'lsin! Dam olishni kinosiz tasavvur qilib bo'lmaydi - eng sara filmlarni mutlaqo reklamasiz tomosha qiling."],
+        [1, "Assalomu alaykum, {name}! 💪 Yangi hafta boshlandi - yaxshi dam oldingizmi? Haftani zo'r kino bilan boshlang, albatta reklamasiz."],
+        [2, "Assalomu alaykum, {name}! 🍿 Kun davomida sizga yaxshi kayfiyat tilaymiz. Bugungi bepul \"🎲 Tasodifiy kino\"ngizni olishni unutmang!"],
+        [3, "Assalomu alaykum, {name}! 🎁 Hafta yarmi bo'ldi! Do'stlaringizni botga taklif qiling va bonus kino ochish imkoniyatiga ega bo'ling."],
+        [4, "Assalomu alaykum, {name}! ⭐ Bugun haftaning eng top kinolarini ko'rib chiqishga vaqt ajrating - eng ko'p yoqtirilgan filmlar sizni kutmoqda."],
+        [5, "Juma muborak, {name}! 🎉 Dam olish kunlari boshlanmoqda - katta kino marafoniga tayyormisiz? 💎 Premium bilan barcha kinolarni cheklovsiz tomosha qiling!"],
+        [6, "Assalomu alaykum, {name}! 🍿 Bugun oilangiz yoki yaqinlaringiz bilan birga ajoyib kino ko'rish kuni. Yaxshi dam oling!"]
+    ];
+    const insertDailyMessage = db.prepare('INSERT OR IGNORE INTO daily_messages (day_of_week, template) VALUES (?, ?)');
+    for (const [dayOfWeek, template] of defaultDailyMessages) {
+        insertDailyMessage.run(dayOfWeek, template);
+    }
+
     console.log('Database initialized.');
 };
 

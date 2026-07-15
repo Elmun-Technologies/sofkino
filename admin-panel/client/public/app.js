@@ -1655,6 +1655,80 @@ function bindBroadcastForm() {
     }, 100);
 }
 
+const DAY_NAMES = ['Yakshanba', 'Dushanba', 'Seshanba', 'Chorshanba', 'Payshanba', 'Juma', 'Shanba'];
+
+function dailyMessagesHtml() {
+    return `
+        <div style="background: #141a2e; border: 1px solid #1e2542; padding: 30px; border-radius: 16px; margin-bottom: 30px;">
+            <h3 style="color: #667eea; margin-bottom: 10px;">🗓️ HAR KUNLIK AVTOMATIK TABRIK XABARLARI</h3>
+            <p style="color: #8b92b0; font-size: 13px; margin-bottom: 20px;">
+                Har kuni soat 10:00da (kunlik kino tavsiyasi bilan birga) shu matn yuboriladi.
+                <code>{name}</code> foydalanuvchining ismi (yoki username) bilan avtomatik almashtiriladi.
+            </p>
+            <div id="daily-messages-list">Yuklanmoqda...</div>
+        </div>
+    `;
+}
+
+async function loadDailyMessages() {
+    const listEl = document.getElementById('daily-messages-list');
+    if (!listEl) return;
+    try {
+        const res = await fetch(`${API_URL}/daily-messages`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const messages = await res.json();
+
+        if (!Array.isArray(messages)) {
+            listEl.innerHTML = `<p style="color: #ef4444;">Xatolik: ${messages?.error || 'Server javobi noto\'g\'ri'}</p>`;
+            return;
+        }
+
+        listEl.innerHTML = messages.map(m => `
+            <div style="margin-bottom: 18px;">
+                <label style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span style="font-weight: 700; color: #a5b4fc;">${DAY_NAMES[m.day_of_week] || m.day_of_week}</span>
+                </label>
+                <textarea id="daily-message-${m.day_of_week}" rows="3" style="width: 100%;">${m.template || ''}</textarea>
+                <button onclick="saveDailyMessage(${m.day_of_week})" class="btn-primary" style="margin-top: 8px; padding: 8px 16px; width: auto;">💾 Saqlash</button>
+                <span id="daily-message-status-${m.day_of_week}" style="margin-left: 10px; font-size: 12px;"></span>
+            </div>
+        `).join('');
+    } catch (err) {
+        console.error('loadDailyMessages error:', err);
+        listEl.innerHTML = `<p style="color: #ef4444;">Xatolik: ${err.message}</p>`;
+    }
+}
+
+async function saveDailyMessage(day) {
+    const textarea = document.getElementById(`daily-message-${day}`);
+    const statusEl = document.getElementById(`daily-message-status-${day}`);
+    if (!textarea) return;
+
+    try {
+        const res = await fetch(`${API_URL}/daily-messages/${day}`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ template: textarea.value })
+        });
+        const result = await res.json();
+        if (statusEl) {
+            statusEl.style.color = result.success ? '#10b981' : '#ef4444';
+            statusEl.textContent = result.success ? '✅ Saqlandi' : ('❌ ' + (result.error || 'Xatolik'));
+            setTimeout(() => { statusEl.textContent = ''; }, 3000);
+        }
+    } catch (err) {
+        console.error('saveDailyMessage error:', err);
+        if (statusEl) {
+            statusEl.style.color = '#ef4444';
+            statusEl.textContent = '❌ ' + err.message;
+        }
+    }
+}
+
 async function loadBroadcasts() {
     try {
         const res = await fetch(`${API_URL}/broadcast`, {
@@ -1703,8 +1777,9 @@ async function loadBroadcasts() {
                     </tbody>
                </table>`;
 
-        pageEl.innerHTML = header + broadcastFormHtml() + historyHtml;
+        pageEl.innerHTML = header + broadcastFormHtml() + dailyMessagesHtml() + historyHtml;
         bindBroadcastForm();
+        loadDailyMessages();
     } catch (err) {
         console.error(err);
     }

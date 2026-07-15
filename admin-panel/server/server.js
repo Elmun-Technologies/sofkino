@@ -50,6 +50,7 @@ const genresRoutes = require('./routes/genres');
 const broadcastRoutes = require('./routes/broadcast');
 const premiumRoutes = require('./routes/premium');
 const channelsRoutes = require('./routes/channels');
+const dailyMessagesRoutes = require('./routes/dailyMessages');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/analytics', analyticsRoutes);
@@ -60,6 +61,7 @@ app.use('/api/genres', genresRoutes);
 app.use('/api/broadcast', broadcastRoutes);
 app.use('/api/premium', premiumRoutes);
 app.use('/api/channels', channelsRoutes);
+app.use('/api/daily-messages', dailyMessagesRoutes);
 
 // Serve frontend
 app.get('*', (req, res) => {
