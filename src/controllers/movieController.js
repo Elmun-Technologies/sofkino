@@ -4,8 +4,12 @@ const Genre = require('../models/Genre');
 const User = require('../models/User');
 const { db } = require('../config/db');
 const { FREE_RANDOM_PER_DAY, FREE_CODES_PER_MONTH, TZ_OFFSET_SQL } = require('../config/gamification');
+const { isAdminId } = require('../config/admins');
 
-function isPremiumUser(user) {
+// Admins always count as premium (unlimited), regardless of any actual
+// subscription row - pass the Telegram user id as userId to apply this.
+function isPremiumUser(user, userId) {
+    if (isAdminId(userId)) return true;
     return !!(user && user.is_premium && new Date(user.premium_end) > new Date());
 }
 
@@ -170,7 +174,7 @@ const movieController = {
         }
 
         const user = User.findById(ctx.from.id);
-        const isPremium = isPremiumUser(user);
+        const isPremium = isPremiumUser(user, ctx.from.id);
 
         // Check if user has access
         if (movie.is_premium_only && !isPremium) {
@@ -266,7 +270,7 @@ const movieController = {
         }
 
         const user = User.findById(ctx.from.id);
-        const isPremium = isPremiumUser(user);
+        const isPremium = isPremiumUser(user, ctx.from.id);
 
         if (movie.is_premium_only && !isPremium) {
             return ctx.reply(`🔒 <b>${escapeHtml(movie.title)}</b>\n\nBu kino faqat Premium obunachilarga ochiq!\n💎 Premium obunani faollashtiring.`, {
