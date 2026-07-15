@@ -19,4 +19,19 @@ function isAdminId(id) {
     return getAdminIds().includes(parseInt(id, 10));
 }
 
-module.exports = { getAdminIds, isAdminId };
+// Consistent, diagnosable logging for every "notify all admins" loop across
+// the bot (channel_post, payment screenshots, payment alerts). Telegraf's
+// TelegramError exposes `.code` (Telegram's numeric error_code, e.g. 403) and
+// `.description` - surface both so a failure like an admin having blocked the
+// bot or never having pressed /start is obvious from the logs instead of a
+// bare "Failed to notify admin".
+function logAdminNotifyFailure(context, adminId, err) {
+    const code = err?.code ?? err?.response?.error_code ?? null;
+    const description = err?.description ?? err?.response?.description ?? err?.message ?? String(err);
+    const hint = code === 403
+        ? " (403 = admin botni bloklagan yoki hech qachon /start bosmagan - u shu ID bilan botga /start yuborishi kerak)"
+        : '';
+    console.error(`[${context}] Failed to notify admin ${adminId}: code=${code ?? 'noma\'lum'} ${description}${hint}`);
+}
+
+module.exports = { getAdminIds, isAdminId, logAdminNotifyFailure };

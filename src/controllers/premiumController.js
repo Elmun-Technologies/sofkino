@@ -2,7 +2,7 @@ const { Markup } = require('telegraf');
 const User = require('../models/User');
 const { db } = require('../config/db');
 const { getPaymentInfo } = require('../config/payment');
-const { getAdminIds } = require('../config/admins');
+const { getAdminIds, logAdminNotifyFailure } = require('../config/admins');
 
 function escapeHtml(str) {
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
@@ -168,7 +168,7 @@ ${cardText}
                 const send = isDocument
                     ? ctx.telegram.sendDocument(adminId, fileId, { caption, parse_mode: 'HTML', ...buttons })
                     : ctx.telegram.sendPhoto(adminId, fileId, { caption, parse_mode: 'HTML', ...buttons });
-                await send.catch(err => console.error(`Failed to notify admin ${adminId} of payment:`, err.message));
+                await send.catch(err => logAdminNotifyFailure('handleScreenshot', adminId, err));
             }
         } catch (err) {
             console.error('handleScreenshot error:', err);
@@ -198,7 +198,7 @@ ${cardText}
 
             const alertText = `⚠️ <b>To'lov #${paymentId} avtomatik tasdiqlanmadi</b>\n\nNoma'lum tarif turi: <code>${escapeHtml(payment.subscription_type || 'bo\'sh')}</code>\n👤 Foydalanuvchi ID: ${payment.user_id}\n\nTo'lov "pending" holatida saqlandi (Premium berilmadi). Dasturchiga murojaat qiling.`;
             for (const adminId of getAdminIds()) {
-                await ctx.telegram.sendMessage(adminId, alertText, { parse_mode: 'HTML' }).catch(() => { });
+                await ctx.telegram.sendMessage(adminId, alertText, { parse_mode: 'HTML' }).catch(err => logAdminNotifyFailure('approvePayment', adminId, err));
             }
             return;
         }

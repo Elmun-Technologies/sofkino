@@ -7,7 +7,7 @@ const { isAdmin } = require('./utils/auth');
 const User = require('./models/User');
 const checkSubscription = require('./utils/subscriptionMiddleware');
 const { captureReferral, rewardReferralIfPending } = require('./utils/referralReward');
-const { getAdminIds } = require('./config/admins');
+const { getAdminIds, logAdminNotifyFailure } = require('./config/admins');
 
 // Controllers
 const movieController = require('./controllers/movieController');
@@ -157,7 +157,7 @@ bot.on('channel_post', async (ctx, next) => {
                                 parse_mode: 'HTML',
                                 ...Markup.inlineKeyboard([[Markup.button.callback('✅ Nashr qilish', `movie_publish_auto_${id}`)]])
                             }
-                        ).catch(err => console.error(`[channel_post] Failed to notify admin ${adminId}:`, err.message));
+                        ).catch(err => logAdminNotifyFailure('channel_post', adminId, err));
                     }
                 }
             } catch (err) {
@@ -411,6 +411,11 @@ bot.hears('📋 Tiketlarim', (ctx) => helpController.showMyTickets(ctx));
 
 // Back button
 bot.hears('⬅️ Orqaga', (ctx) => ctx.reply('Asosiy menyu', mainMenu));
+
+// Log the resolved admin id list on every boot, so a misconfigured/misspelled
+// ADMIN_IDS env var (the #1 cause of "admin X never gets notified") is
+// visible in the deploy logs instead of only surfacing as a silent 403 later.
+console.log('👑 Admin IDs (ADMIN_IDS/ADMIN_ID dan o\'qildi):', getAdminIds());
 
 // Launch bot
 // Telegram remembers the last allowed_updates list used for this bot token
