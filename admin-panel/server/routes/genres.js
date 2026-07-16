@@ -15,7 +15,8 @@ router.get('/', authMiddleware, async (req, res) => {
         `).all();
         res.json(genres);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 
@@ -26,7 +27,8 @@ router.post('/', authMiddleware, async (req, res) => {
         const result = await db.prepare('INSERT INTO genres (name) VALUES (?)').run([name]);
         res.json({ success: true, id: result.lastID });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 
@@ -36,7 +38,8 @@ router.delete('/:id', authMiddleware, async (req, res) => {
         await db.prepare('DELETE FROM genres WHERE id = ?').run([req.params.id]);
         res.json({ success: true });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 
@@ -48,7 +51,8 @@ router.get('/:id/top-movies', authMiddleware, async (req, res) => {
         `).all([req.params.id]);
         res.json(movies);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 

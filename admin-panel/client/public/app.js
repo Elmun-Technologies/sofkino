@@ -11,6 +11,21 @@ function formatNumber(num) {
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
 
+// Escape HTML-unsafe characters before interpolating any value that came
+// from Telegram (full_name, username, custom_name, movie captions, etc.)
+// into innerHTML - these are attacker-controlled (anyone can set their
+// Telegram profile name to arbitrary markup) and were previously rendered
+// unescaped, allowing stored XSS in an authenticated admin's browser.
+function escapeHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // Helper: Random number
 function random(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
@@ -230,7 +245,7 @@ async function loadPendingMovies() {
             return `
             <div style="display: flex; justify-content: space-between; align-items: center; padding: 15px; background: #0f1429; border: 1px solid #1e2542; border-radius: 10px; margin-bottom: 10px;">
                 <div>
-                    <div style="font-weight: 600;">${hasTitle ? p.title : '🎞️ Nomi aniqlanmadi'}</div>
+                    <div style="font-weight: 600;">${hasTitle ? escapeHtml(p.title) : '🎞️ Nomi aniqlanmadi'}</div>
                     <small style="color: #8b92b0;">${p.access_code ? '🔑 ' + p.access_code + ' · ' : ''}${p.genre_name ? '🎭 ' + p.genre_name : '⚠️ Janr aniqlanmadi'} · ${p.created_at || ''}</small>
                 </div>
                 <div style="display: flex; gap: 8px;">
@@ -382,7 +397,7 @@ async function loadAnalytics() {
                 <div style="display: flex; align-items: center;">
                     <div style="font-size: 20px; margin-right: 12px;">${i === 0 ? '👑' : '🎬'}</div>
                     <div>
-                        <strong style="color: white; display: block; font-size: 14px;">${m.title}</strong>
+                        <strong style="color: white; display: block; font-size: 14px;">${escapeHtml(m.title)}</strong>
                         <small style="color: #667eea; font-weight: 600;">${m.genre_name || 'Janrsiz'}</small>
                     </div>
                 </div>
@@ -689,6 +704,12 @@ async function showSubscriptionDetails(typeKey, stat) {
             return;
         }
 
+        // Stored (not interpolated into an onclick attribute) so downloadReceipt
+        // can look a subscriber up by transaction_id instead of embedding their
+        // Telegram name - which is attacker-controlled - directly into markup.
+        lastSubscribers = subscribers;
+        lastSubscribersTariffType = typeKey;
+
         const tableHtml = `
             <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
                 <thead>
@@ -703,13 +724,13 @@ async function showSubscriptionDetails(typeKey, stat) {
                     ${subscribers.slice(0, 50).map(s => `
                         <tr style="border-bottom: 1px solid #1e2542;">
                             <td style="padding: 15px;">
-                                <div style="font-weight: 600;">${s.full_name || 'Noma\'lum'}</div>
-                                <div style="font-size: 11px; color: #8b92b0;">@${s.username || '-'}</div>
+                                <div style="font-weight: 600;">${escapeHtml(s.full_name) || 'Noma\'lum'}</div>
+                                <div style="font-size: 11px; color: #8b92b0;">@${escapeHtml(s.username) || '-'}</div>
                             </td>
                             <td style="padding: 15px; color: #10b981; font-weight: 700;">${formatNumber(s.amount)} SO'M</td>
                             <td style="padding: 15px; font-size: 12px; color: #8b92b0;">${new Date(s.created_at).toLocaleDateString()}</td>
                             <td style="padding: 15px;">
-                                <button onclick="downloadReceipt('${(s.full_name || 'Nomalum').replace(/'/g, '')}', '${s.amount}', '${new Date(s.created_at).toLocaleDateString()}', '${typeKey}', '${s.transaction_id || ''}')"
+                                <button onclick="downloadReceipt('${escapeHtml(s.transaction_id || '')}')"
                                         style="background: rgba(102, 126, 234, 0.1); color: #667eea; border: 1px solid rgba(102, 126, 234, 0.2); padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 11px;">
                                     📄 Chek yuklash
                                 </button>
@@ -728,7 +749,12 @@ async function showSubscriptionDetails(typeKey, stat) {
     }
 }
 
-function downloadReceipt(name, amount, date, type, transactionId) {
+// Looks the subscriber up by transaction_id from the last-loaded list instead
+// of taking their name/amount/date as function arguments embedded in an
+// onclick="..." attribute - a Telegram display name containing a quote or
+// angle bracket could otherwise break out of that attribute (the same class
+// of stored-XSS risk as unescaped innerHTML).
+function downloadReceipt(transactionId) {
     const typeNames = {
         monthly: 'OYLIK',
         quarterly: '3 OYLIK',
@@ -736,13 +762,19 @@ function downloadReceipt(name, amount, date, type, transactionId) {
         lifetime: 'UMRBOD'
     };
 
+    const subscriber = lastSubscribers.find(s => (s.transaction_id || '') === transactionId);
+    if (!subscriber) return alert('Chek topilmadi. Ro\'yxatni qayta yuklang.');
+
+    const name = subscriber.full_name || 'Nomalum';
+    const date = new Date(subscriber.created_at).toLocaleDateString();
+
     const textBlob = `
 SOFKINO RECEIPT
 -----------------------
-TARIF: ${typeNames[type]}
+TARIF: ${typeNames[lastSubscribersTariffType] || lastSubscribersTariffType}
 KLIYENT: ${name}
 SANA: ${date}
-SUMMA: ${amount} UZS
+SUMMA: ${subscriber.amount} UZS
 HOLATI: YAKUNLANDI
 -----------------------
 ID: ${transactionId || 'N/A'}
@@ -750,7 +782,7 @@ ID: ${transactionId || 'N/A'}
     const blob = new Blob([textBlob], { type: 'text/plain' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `chek-${name.replace(' ', '-')}.txt`;
+    link.download = `chek-${name.replace(/[^a-zA-Z0-9_-]/g, '-')}.txt`;
     link.click();
 }
 
@@ -834,6 +866,8 @@ function updatePaymentMethodsUI(methods) {
 
 // Load Movies with Top Performers and Filters
 let lastLoadedMovies = [];
+let lastSubscribers = [];
+let lastSubscribersTariffType = null;
 
 async function loadMovies() {
     const listEl = document.getElementById('movies-list');
@@ -878,7 +912,7 @@ async function loadMovies() {
                             <span style="background: ${i === 0 ? 'rgba(245, 158, 11, 0.1)' : 'rgba(102, 126, 234, 0.1)'}; color: ${i === 0 ? '#f59e0b' : '#667eea'}; padding: 4px 8px; border-radius: 6px; font-size: 10px; font-weight: 800; letter-spacing: 1px;">TOP ${i + 1}</span>
                             <span style="color: #10b981; font-weight: 700; font-size: 12px;">★ ${m.rating || 'N/A'}</span>
                         </div>
-                        <h3 style="font-size: 16px; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${m.title}</h3>
+                        <h3 style="font-size: 16px; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(m.title)}</h3>
                         <p style="color: #8b92b0; font-size: 11px; margin-bottom: 15px;">${m.genre_name || 'Janrsiz'}</p>
                     </div>
                     <div style="display: flex; gap: 15px; border-top: 1px solid #1e2542; pt: 15px; margin-top: 10px;">
@@ -933,7 +967,7 @@ async function loadMovies() {
                                 <div style="display: flex; align-items: center; gap: 12px;">
                                     <div style="width: 40px; height: 50px; background: #0f1429; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 20px; border: 1px solid #1e2542;">🎬</div>
                                     <div>
-                                        <strong style="color: white; display: block;">${m.title}</strong>
+                                        <strong style="color: white; display: block;">${escapeHtml(m.title)}</strong>
                                         <small style="color: #667eea; font-weight: 600;">${m.genre_name || 'Janrsiz'}</small>
                                     </div>
                                 </div>
@@ -1112,8 +1146,8 @@ async function loadUsers(filters = {}) {
                     ${users.map(u => `
                         <tr>
                             <td><code>${u.telegram_id}</code></td>
-                            <td><strong>${u.full_name || 'N/A'}</strong>${u.is_banned ? ' <span style="color: #ef4444; font-size: 11px;">(BAN)</span>' : ''}</td>
-                            <td>@${u.username || 'N/A'}</td>
+                            <td><strong>${escapeHtml(u.full_name) || 'N/A'}</strong>${u.is_banned ? ' <span style="color: #ef4444; font-size: 11px;">(BAN)</span>' : ''}</td>
+                            <td>@${escapeHtml(u.username) || 'N/A'}</td>
                             <td>${u.city || '-'}</td>
                             <td>${new Date(u.joined_at).toLocaleDateString()}</td>
                             <td>${u.is_premium ? '<span style="color: #10b981;">✅ Premium</span>' : '<span style="color: #8b92b0;">❌</span>'}</td>
@@ -1296,7 +1330,7 @@ async function viewTopMovies(genreId, genreName) {
                     <div style="display: flex; justify-content: space-between; align-items: center;">
                         <div>
                             <span style="color: #667eea; font-weight: 700;">#${i + 1}</span>
-                            <span style="margin-left: 10px; font-weight: 600;">${m.title}</span>
+                            <span style="margin-left: 10px; font-weight: 600;">${escapeHtml(m.title)}</span>
                         </div>
                         <div style="text-align: right;">
                             <span style="display: block; color: #8b92b0; font-size: 10px;">KO'RISHLAR</span>
@@ -1437,7 +1471,7 @@ async function viewPromocodeAnalytics(id) {
         } else {
             const html = usages.map(u => `
                 <div style="padding: 10px; background: #0f1429; border: 1px solid #1e2542; margin: 5px 0; border-radius: 8px;">
-                    <strong>${u.full_name || 'N/A'} (@${u.username || 'no username'})</strong><br>
+                    <strong>${escapeHtml(u.full_name) || 'N/A'} (@${escapeHtml(u.username) || 'no username'})</strong><br>
                     <small style="color: #8b92b0;">Ro'yxatdan o'tgan: ${u.user_created_at ? new Date(u.user_created_at).toLocaleDateString() : '-'}</small><br>
                     <small style="color: #8b92b0;">Ishlatgan: ${new Date(u.used_at).toLocaleString()}</small>
                 </div>
@@ -1506,7 +1540,7 @@ async function loadChannels() {
                     ${channels.map(c => `
                         <tr>
                             <td>
-                                <div style="font-weight: 700;">${c.title}</div>
+                                <div style="font-weight: 700;">${escapeHtml(c.title)}</div>
                                 <a href="${c.url}" target="_blank" style="color: #667eea; font-size: 12px;">Havola 🔗</a>
                             </td>
                             <td><code>${c.channel_id}</code></td>
@@ -1758,8 +1792,8 @@ async function loadBroadcasts() {
                         ${posts.map(p => `
                             <tr>
                                 <td style="max-width: 300px;">
-                                    <div style="font-weight: 700;">${p.title || 'Sarlavhasiz'}</div>
-                                    <p style="font-size: 12px; color: #8b92b0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${p.content || ''}</p>
+                                    <div style="font-weight: 700;">${escapeHtml(p.title) || 'Sarlavhasiz'}</div>
+                                    <p style="font-size: 12px; color: #8b92b0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(p.content)}</p>
                                 </td>
                                 <td>
                                     <span style="font-size: 11px; padding: 4px 8px; border-radius: 4px; background: rgba(102, 126, 234, 0.1); color: #667eea; text-transform: uppercase;">${p.type || 'text'}</span>

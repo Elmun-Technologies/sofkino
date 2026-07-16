@@ -9,7 +9,8 @@ router.get('/', authMiddleware, async (req, res) => {
         const channels = await db.prepare('SELECT * FROM channels ORDER BY created_at DESC').all();
         res.json(channels);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 
@@ -20,7 +21,8 @@ router.post('/', authMiddleware, async (req, res) => {
         const result = await db.prepare('INSERT INTO channels (title, url, channel_id) VALUES (?, ?, ?)').run([title, url, channel_id]);
         res.json({ success: true, id: result.lastID });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 
@@ -31,7 +33,8 @@ router.put('/:id', authMiddleware, async (req, res) => {
         await db.prepare('UPDATE channels SET title = ?, url = ?, channel_id = ?, is_active = ? WHERE id = ?').run([title, url, channel_id, is_active ? 1 : 0, req.params.id]);
         res.json({ success: true });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 
@@ -41,7 +44,8 @@ router.delete('/:id', authMiddleware, async (req, res) => {
         await db.prepare('DELETE FROM channels WHERE id = ?').run([req.params.id]);
         res.json({ success: true });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 

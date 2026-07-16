@@ -116,7 +116,7 @@ router.get('/', authMiddleware, async (req, res) => {
         });
     } catch (err) {
         console.error('Analytics error:', err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 
@@ -165,7 +165,8 @@ router.get('/movies/:id', authMiddleware, async (req, res) => {
             }
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 

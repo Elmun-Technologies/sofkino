@@ -14,6 +14,14 @@ const dbPath = process.env.DB_PATH
     || (fs.existsSync('/data') ? path.join('/data', 'database.sqlite') : path.resolve(__dirname, '../../database.sqlite'));
 const db = new sqlite3.Database(dbPath);
 
+// Same reasoning as src/config/db.js's pragmas: WAL lets this connection and
+// the bot's separate better-sqlite3 connection to the same file read/write
+// concurrently instead of taking an exclusive lock per write, and
+// busy_timeout makes a write that finds the file locked retry for up to 5s
+// instead of failing immediately with SQLITE_BUSY (default busy_timeout is 0).
+db.run('PRAGMA journal_mode = WAL', (err) => { if (err) console.error('Failed to set journal_mode=WAL:', err.message); });
+db.run('PRAGMA busy_timeout = 5000', (err) => { if (err) console.error('Failed to set busy_timeout:', err.message); });
+
 // Simple wrapper to make sqlite3 work like better-sqlite3
 const dbWrapper = {
     prepare: (sql) => ({
@@ -35,7 +43,14 @@ const dbWrapper = {
 module.exports.db = dbWrapper;
 
 // Middleware
-app.use(cors());
+// The admin panel is served from this same origin (app.get('*') below serves
+// client/public), so the API never needs to be reachable from arbitrary
+// third-party origins. ADMIN_PANEL_ORIGIN can override this for a separately
+// hosted frontend; falling back to reflecting no origin restriction only
+// when neither is set would defeat the purpose, so default to same-origin
+// (no CORS headers needed) rather than the previous wildcard.
+const corsOrigin = process.env.ADMIN_PANEL_ORIGIN || false;
+app.use(cors({ origin: corsOrigin }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, '../client/public')));

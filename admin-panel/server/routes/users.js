@@ -44,7 +44,7 @@ router.get('/', authMiddleware, async (req, res) => {
         res.json(users);
     } catch (err) {
         console.error('Fetch users error:', err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 
@@ -55,7 +55,8 @@ router.post('/:id/ban', authMiddleware, async (req, res) => {
         await db.prepare('UPDATE users SET is_banned = 1 WHERE telegram_id = ?').run([id]);
         res.json({ success: true });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 
@@ -66,7 +67,8 @@ router.post('/:id/unban', authMiddleware, async (req, res) => {
         await db.prepare('UPDATE users SET is_banned = 0 WHERE telegram_id = ?').run([id]);
         res.json({ success: true });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 
@@ -77,7 +79,8 @@ router.delete('/:id', authMiddleware, async (req, res) => {
         await db.prepare('DELETE FROM users WHERE telegram_id = ?').run([id]);
         res.json({ success: true });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 

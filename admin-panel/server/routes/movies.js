@@ -44,7 +44,7 @@ router.get('/', authMiddleware, async (req, res) => {
         res.json(movies);
     } catch (err) {
         console.error('Fetch movies error:', err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 
@@ -65,7 +65,7 @@ router.get('/pending', authMiddleware, async (req, res) => {
         res.json(pending);
     } catch (err) {
         console.error('Fetch pending movies error:', err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 
@@ -101,7 +101,7 @@ router.put('/:id/publish-auto', authMiddleware, async (req, res) => {
         res.json({ success: true, accessCode, title: movie.title });
     } catch (err) {
         console.error('Error auto-publishing movie:', err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 
@@ -145,7 +145,7 @@ router.put('/:id/publish', authMiddleware, async (req, res) => {
         res.json({ success: true, accessCode });
     } catch (err) {
         console.error('Error publishing movie:', err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 
@@ -163,7 +163,8 @@ router.put('/:id', authMiddleware, async (req, res) => {
 
         res.json({ success: true });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 
@@ -174,7 +175,8 @@ router.delete('/:id', authMiddleware, async (req, res) => {
         await db.prepare('DELETE FROM movies WHERE id = ?').run([id]);
         res.json({ success: true });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 

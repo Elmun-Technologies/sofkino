@@ -353,6 +353,22 @@ bot.on('document', (ctx, next) => {
 // User Commands - Code Input
 let waitingForCode = {};
 
+// Access codes are only 4 digits (1000-9999), so nothing app-side stopped
+// someone from rapid-fire guessing every possible code. Cap it at 5 attempts
+// per rolling minute per user - generous for a real person occasionally
+// mistyping a code, but it kills brute-force enumeration.
+const codeAttemptLog = {}; // userId -> timestamps of recent attempts
+const CODE_ATTEMPT_LIMIT = 5;
+const CODE_ATTEMPT_WINDOW_MS = 60 * 1000;
+
+function isCodeAttemptRateLimited(userId) {
+    const now = Date.now();
+    const recent = (codeAttemptLog[userId] || []).filter(t => now - t < CODE_ATTEMPT_WINDOW_MS);
+    recent.push(now);
+    codeAttemptLog[userId] = recent;
+    return recent.length > CODE_ATTEMPT_LIMIT;
+}
+
 bot.hears('🔑 KINO KODINI KIRITISH', (ctx) => {
     waitingForCode[ctx.from.id] = true;
     ctx.reply('🔑 Kino kodini kiriting:\n\nMasalan: 101, 777, ABC123');
@@ -362,6 +378,9 @@ bot.hears('🔑 KINO KODINI KIRITISH', (ctx) => {
 bot.on('text', (ctx, next) => {
     if (waitingForCode[ctx.from.id]) {
         delete waitingForCode[ctx.from.id];
+        if (isCodeAttemptRateLimited(ctx.from.id)) {
+            return ctx.reply('⏳ Juda ko\'p urinish. Bir necha daqiqadan keyin qayta urinib ko\'ring.');
+        }
         return movieController.unlockByCode(ctx, ctx.message.text);
     }
     if (premiumController.isAwaitingScreenshot(ctx.from.id)) {

@@ -3,6 +3,13 @@ const router = express.Router();
 const authMiddleware = require('../middleware/auth');
 const { db } = require('../server');
 const { Telegraf, Markup } = require('telegraf');
+// Same throttled send loop the bot itself uses (src/jobs/progrevJob.js) - this
+// route used to fire sends back-to-back with NO delay at all, which hits
+// Telegram's ~30 msg/sec flood limit almost immediately once there are more
+// than a couple hundred recipients. sendToUsers() has no dependencies beyond
+// the telegram client + a plain user array, so it's safe to reuse across the
+// two separate OS processes (bot vs admin panel).
+const { sendToUsers } = require('../../../src/utils/broadcast');
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
@@ -12,7 +19,8 @@ router.get('/', authMiddleware, async (req, res) => {
         const posts = await db.prepare('SELECT * FROM news_posts ORDER BY created_at DESC').all();
         res.json(posts);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 
@@ -52,29 +60,17 @@ router.post('/', authMiddleware, async (req, res) => {
             keyboard.unshift([Markup.button.url(label, url)]);
         }
 
-        let successCount = 0;
-        let failCount = 0;
-
-        for (const user of users) {
-            try {
-                const options = { parse_mode: 'Markdown', ...Markup.inlineKeyboard(keyboard) };
-                if (type === 'image') {
-                    await bot.telegram.sendPhoto(user.telegram_id, mediaId, { caption: text, ...options });
-                } else if (type === 'video') {
-                    await bot.telegram.sendVideo(user.telegram_id, mediaId, { caption: text, ...options });
-                } else {
-                    await bot.telegram.sendMessage(user.telegram_id, text, options);
-                }
-                successCount++;
-            } catch (err) {
-                failCount++;
-                console.error('Failed to send to user', user.telegram_id, err.message);
-            }
-        }
+        const { successCount, failCount } = await sendToUsers(bot.telegram, users, {
+            type,
+            text,
+            mediaId,
+            options: { parse_mode: 'Markdown', ...Markup.inlineKeyboard(keyboard) }
+        });
 
         res.json({ success: true, sent: successCount, failed: failCount });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 

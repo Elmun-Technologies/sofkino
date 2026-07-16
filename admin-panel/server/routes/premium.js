@@ -103,7 +103,8 @@ router.get('/', authMiddleware, async (req, res) => {
             monthlyBreakdown: monthlyData
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 
@@ -131,7 +132,8 @@ router.get('/payment-methods', authMiddleware, async (req, res) => {
         const stats = await db.prepare(query).all(params);
         res.json(stats);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 
@@ -157,7 +159,8 @@ router.get('/subscribers', authMiddleware, async (req, res) => {
 
         res.json(subscribers);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 

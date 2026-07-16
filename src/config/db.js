@@ -13,6 +13,16 @@ try { fs.mkdirSync(path.dirname(dbPath), { recursive: true }); } catch (e) { }
 
 const db = new Database(dbPath); // verbose: console.log
 
+// WAL lets readers and writers proceed concurrently instead of the default
+// rollback-journal mode's exclusive-lock-per-write, and busy_timeout makes a
+// writer that finds the file locked (by the admin panel's separate sqlite3
+// connection to this same file) retry for up to 5s instead of throwing
+// SQLITE_BUSY immediately (the default busy_timeout is 0). WAL is a no-op on
+// an in-memory DB (used by the test suite) - SQLite just keeps journal_mode
+// as "memory" there, which is fine.
+db.pragma('journal_mode = WAL');
+db.pragma('busy_timeout = 5000');
+
 // Initialize Database Schema
 const initDb = () => {
     // Users table
@@ -141,6 +151,15 @@ const initDb = () => {
     // 'random' (daily free random movie), 'paid' (bonus-unlock at a paywall)
     try { db.exec("ALTER TABLE movie_views ADD COLUMN source TEXT DEFAULT 'code'"); } catch (e) { }
 
+    // Without these, the admin panel's analytics/premium dashboards
+    // (admin-panel/server/routes/analytics.js, premium.js) do full-table scans
+    // over movie_views/payments on every page load - fine at today's row
+    // counts, but it grows linearly with total views/payments and gets slow
+    // well before the underlying WAL/busy_timeout fix (above) matters.
+    db.exec('CREATE INDEX IF NOT EXISTS idx_movie_views_user ON movie_views(user_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_movie_views_movie ON movie_views(movie_id)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_movie_views_viewed_at ON movie_views(viewed_at)');
+
     // Referrals: who invited whom, and whether the referrer has been rewarded
     db.exec(`
         CREATE TABLE IF NOT EXISTS referrals (
@@ -251,6 +270,12 @@ const initDb = () => {
 
     // Screenshot the user sent as proof of a manual bank transfer
     try { db.exec('ALTER TABLE payments ADD COLUMN screenshot_file_id TEXT'); } catch (e) { }
+
+    // See the movie_views index comment above - same reasoning for the
+    // admin panel's premium revenue queries (admin-panel/server/routes/premium.js),
+    // which filter/group by status and created_at on every dashboard load.
+    db.exec('CREATE INDEX IF NOT EXISTS idx_payments_created_at ON payments(created_at)');
+    db.exec('CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status)');
 
     // Promocodes (managed from the admin panel)
     db.exec(`

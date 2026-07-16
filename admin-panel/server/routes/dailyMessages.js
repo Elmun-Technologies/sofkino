@@ -12,7 +12,8 @@ router.get('/', authMiddleware, async (req, res) => {
         const messages = await db.prepare('SELECT * FROM daily_messages ORDER BY day_of_week ASC').all([]);
         res.json(messages);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 
@@ -40,7 +41,8 @@ router.put('/:day', authMiddleware, async (req, res) => {
 
         res.json({ success: true });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 

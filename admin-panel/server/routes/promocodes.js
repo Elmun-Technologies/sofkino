@@ -15,7 +15,8 @@ router.get('/', authMiddleware, async (req, res) => {
         `).all();
         res.json(promocodes);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 
@@ -26,7 +27,8 @@ router.post('/', authMiddleware, async (req, res) => {
         const result = await db.prepare('INSERT INTO promocodes (code, name, usage_limit, expires_at) VALUES (?, ?, ?, ?)').run([code, name, usage_limit, expires_at]);
         res.json({ success: true, id: result.lastID });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 
@@ -36,7 +38,8 @@ router.delete('/:id', authMiddleware, async (req, res) => {
         await db.prepare('DELETE FROM promocodes WHERE id = ?').run([req.params.id]);
         res.json({ success: true });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 
@@ -52,7 +55,8 @@ router.get('/:id/analytics', authMiddleware, async (req, res) => {
         `).all([req.params.id]);
         res.json(usages);
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error(err);
+        res.status(500).json({ error: 'Serverda xatolik yuz berdi' });
     }
 });
 
