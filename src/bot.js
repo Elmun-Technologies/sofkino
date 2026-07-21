@@ -7,7 +7,7 @@ const { isAdmin } = require('./utils/auth');
 const User = require('./models/User');
 const checkSubscription = require('./utils/subscriptionMiddleware');
 const { captureReferral, rewardReferralIfPending } = require('./utils/referralReward');
-const { getAdminIds, logAdminNotifyFailure } = require('./config/admins');
+const { getAdminIds, isAdminId, logAdminNotifyFailure } = require('./config/admins');
 
 // Controllers
 const movieController = require('./controllers/movieController');
@@ -362,6 +362,11 @@ const CODE_ATTEMPT_LIMIT = 5;
 const CODE_ATTEMPT_WINDOW_MS = 60 * 1000;
 
 function isCodeAttemptRateLimited(userId) {
+    // Admins routinely test/publish and re-test codes back-to-back - this
+    // throttle exists to stop brute-force guessing by regular users, not to
+    // slow down the people running the bot.
+    if (isAdminId(userId)) return false;
+
     const now = Date.now();
     const recent = (codeAttemptLog[userId] || []).filter(t => now - t < CODE_ATTEMPT_WINDOW_MS);
     recent.push(now);

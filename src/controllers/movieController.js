@@ -308,10 +308,11 @@ const movieController = {
     },
 
     // "🎲 Tasodifiy kino" — one free random (non-premium) movie per day.
+    // Admins are exempt, same as every other limit in this file.
     async showRandomMovie(ctx) {
         const seenTodayIds = randomViewedTodayIds(ctx.from.id);
 
-        if (seenTodayIds.length >= FREE_RANDOM_PER_DAY) {
+        if (!isAdminId(ctx.from.id) && seenTodayIds.length >= FREE_RANDOM_PER_DAY) {
             const user = User.findById(ctx.from.id);
             return ctx.reply('🎬 Bugungi tekin kinongiz tugadi! Ertaga yana bittasi kutmoqda.', {
                 ...paywallKeyboard(user, { bonusAction: 'use_bonus_random' })
